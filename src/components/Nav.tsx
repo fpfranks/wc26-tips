@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Lightbulb, Trophy, TrendingUp } from "lucide-react";
+import { LayoutDashboard, Lightbulb, Trophy, TrendingUp, Settings } from "lucide-react";
 
 const links = [
-  { href: "/",         label: "Dashboard",   icon: LayoutDashboard },
-  { href: "/tips",     label: "Tips",        icon: Lightbulb },
-  { href: "/tracker",  label: "Bet Tracker", icon: TrendingUp },
-  { href: "/fixtures", label: "Fixtures",    icon: Trophy },
+  { href: "/",          label: "Dashboard",   icon: LayoutDashboard },
+  { href: "/tips",      label: "Tips",        icon: Lightbulb },
+  { href: "/tracker",   label: "Bet Tracker", icon: TrendingUp },
+  { href: "/fixtures",  label: "Fixtures",    icon: Trophy },
+  { href: "/settings",  label: "Settings",    icon: Settings },
 ];
 
 export default function Nav() {

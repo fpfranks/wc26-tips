@@ -195,18 +195,14 @@ export default function AIPicksPanel() {
   const [error, setError] = useState("");
   const [results, setResults] = useState<AnalysisResult[]>([]);
   const [apiKey, setApiKey] = useState("");
-  const [showKeyInput, setShowKeyInput] = useState(false);
+  const [bankroll, setBankroll] = useState<number | "">(200);
 
   useEffect(() => {
-    const saved = localStorage.getItem("wc26-anthropic-key");
-    if (saved) setApiKey(saved);
-    else setShowKeyInput(true);
+    const key = localStorage.getItem("wc26-anthropic-key");
+    if (key) setApiKey(key);
+    const bl = localStorage.getItem("wc26-bankroll");
+    if (bl) setBankroll(parseFloat(bl) || 200);
   }, []);
-
-  function saveKey() {
-    localStorage.setItem("wc26-anthropic-key", apiKey);
-    setShowKeyInput(false);
-  }
 
   // Specific match form
   const [homeTeam, setHomeTeam] = useState("");
@@ -215,12 +211,11 @@ export default function AIPicksPanel() {
   const [homeOdds, setHomeOdds] = useState<number | "">("");
   const [drawOdds, setDrawOdds] = useState<number | "">("");
   const [awayOdds, setAwayOdds] = useState<number | "">("");
-  const [bankroll, setBankroll] = useState<number | "">(200);
 
   void tips;
 
   async function runAnalysis() {
-    if (!apiKey) { setShowKeyInput(true); return; }
+    if (!apiKey) { window.location.href = "/settings"; return; }
     setLoading(true);
     setError("");
     setResults([]);
@@ -278,28 +273,10 @@ export default function AIPicksPanel() {
         </div>
 
         <div className="px-5 py-4 space-y-4">
-          {/* API key input */}
-          {showKeyInput ? (
-            <div className="bg-white/3 border border-amber-500/20 rounded-xl p-4 space-y-3">
-              <p className="text-xs text-white/50">Enter your Anthropic API key — saved to your browser only, never sent anywhere except the AI request.</p>
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
-                  placeholder="sk-ant-api03-..."
-                  className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/50 font-mono"
-                />
-                <button onClick={saveKey} disabled={!apiKey}
-                  className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black text-xs font-bold transition-colors">
-                  Save
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-white/30">API key saved ✓</span>
-              <button onClick={() => setShowKeyInput(true)} className="text-xs text-white/20 hover:text-white/50 transition-colors">Change key</button>
+          {!apiKey && (
+            <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 flex items-center justify-between">
+              <p className="text-xs text-amber-400">Add your Anthropic API key in Settings to enable AI analysis</p>
+              <a href="/settings" className="text-xs font-semibold text-amber-400 hover:text-amber-300 ml-3 whitespace-nowrap">Settings →</a>
             </div>
           )}
 
@@ -377,9 +354,9 @@ export default function AIPicksPanel() {
             <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3">
               <p className="text-sm text-red-400">{error}</p>
               {error.includes("key") && (
-                <button onClick={() => setShowKeyInput(true)} className="text-xs text-amber-400 mt-1 hover:underline">
-                  Update API key →
-                </button>
+                <a href="/settings" className="text-xs text-amber-400 mt-1 hover:underline block">
+                  Update API key in Settings →
+                </a>
               )}
             </div>
           )}
