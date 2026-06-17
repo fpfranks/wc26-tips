@@ -234,8 +234,22 @@ stakeRating rules (only when odds provided):
 
 verdict: "Value Bet" if EV > 0, "Fair" if EV ≈ 0 (within ±2%), "Poor Value" if EV < -0.02, "No odds provided" if no odds given
 
-Return ONLY this JSON object, no markdown:
-{"betDescription":"${betDescription}","probability":62,"fairOdds":1.61,"offeredOdds":${offeredOdds ?? null},"expectedValue":${offeredOdds ? "0.05" : null},"kellyFraction":${offeredOdds ? "0.08" : null},"stakeRating":"${offeredOdds ? "Medium Stake" : "No odds provided"}","verdict":"${offeredOdds ? "Value Bet" : "No odds provided"}","reasoning":"Clear 2-3 sentence explanation of why this probability is right and whether the odds represent value","keyFactors":["Factor supporting this probability","Another key factor","Third factor"],"risks":["Main risk to this bet","Second risk"]}`;
+IMPORTANT: Calculate ALL numeric values yourself based on the specific bet above. Do NOT use placeholder numbers.
+
+Return ONLY valid JSON, no markdown. Use this exact structure:
+{
+  "betDescription": "${betDescription}",
+  "probability": <YOUR_CALCULATED_INTEGER_0_TO_100>,
+  "fairOdds": <100_divided_by_probability_rounded_to_2dp>,
+  "offeredOdds": ${offeredOdds ?? null},
+  "expectedValue": ${offeredOdds ? "<(p*(offeredOdds-1))-(1-p) as decimal>" : null},
+  "kellyFraction": ${offeredOdds ? "<kelly_formula_result_as_decimal>" : null},
+  "stakeRating": "<one of: High Stake|Medium Stake|Low Stake|Skip|No odds provided>",
+  "verdict": "<one of: Value Bet|Fair|Poor Value|No odds provided>",
+  "reasoning": "<2-3 sentences specific to THIS bet>",
+  "keyFactors": ["<factor 1 specific to this bet>", "<factor 2>", "<factor 3>"],
+  "risks": ["<risk 1 specific to this bet>", "<risk 2>"]
+}`;
 }
 
 function buildAccaPrompt(date: string) {
