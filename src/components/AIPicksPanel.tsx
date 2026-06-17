@@ -1059,20 +1059,16 @@ export default function AIPicksPanel() {
     setBetSlipResult(null);
 
     try {
-      // Bet slip uses its own endpoint
+      // Bet slip uses its own endpoint — always sends pasted text, URL is optional reference only
       if (mode === "betslip") {
         const res = await fetch("/api/betslip", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: betSlipUrl, pastedText: betSlipText || undefined, bankroll: bankroll || undefined, apiKey }),
+          body: JSON.stringify({ url: betSlipUrl || "not provided", pastedText: betSlipText, bankroll: bankroll || undefined, apiKey }),
         });
         const data = await res.json() as BetSlipResult & { error?: string };
         if (!res.ok || data.error) { setError(data.error ?? "Analysis failed"); return; }
         setBetSlipResult(data);
-        // If page couldn't be read and no description, suggest fallback
-        if (!data.couldReadPage && data.verdict === "Cannot Analyse" && !betSlipText) {
-          setShowSlipFallback(true);
-        }
         return;
       }
 
@@ -1287,38 +1283,46 @@ export default function AIPicksPanel() {
           {/* Bet slip form */}
           {mode === "betslip" && (
             <div className="space-y-3">
+              {/* Rollbit/Gamdom notice — their sites use Betby (requires partner auth) so we can't auto-read */}
+              <div className="rounded-xl bg-cyan-500/8 border border-cyan-500/15 px-4 py-3 space-y-2">
+                <p className="text-xs font-semibold text-cyan-400">How to use</p>
+                <ol className="text-xs text-white/50 space-y-1 list-decimal list-inside leading-relaxed">
+                  <li>Open your bet slip on Rollbit or Gamdom</li>
+                  <li>Paste the share link below <span className="text-white/30">(optional — for reference)</span></li>
+                  <li>Copy the selections you see and paste them in the box</li>
+                </ol>
+                <p className="text-[10px] text-white/25 leading-relaxed">
+                  Rollbit and Gamdom use Betby&#39;s sportsbook engine which requires partner API credentials to read automatically — so just paste what you see on screen.
+                </p>
+              </div>
+
+              {/* Optional URL reference */}
               <div>
                 <label className="text-[10px] font-medium text-white/30 uppercase tracking-wider block mb-1.5">
-                  Bet slip share link
+                  Share link <span className="text-white/20 normal-case">(optional)</span>
                 </label>
                 <input
                   type="url"
                   value={betSlipUrl}
-                  onChange={e => { setBetSlipUrl(e.target.value); setShowSlipFallback(false); }}
-                  placeholder="https://rollbit.com/share/… or https://gamdom.com/share/…"
+                  onChange={e => setBetSlipUrl(e.target.value)}
+                  placeholder="https://rollbit.com/sports?bt-path=…"
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 font-mono focus:outline-none focus:border-cyan-500/40"
                 />
               </div>
-              {(showSlipFallback || betSlipText) && (
-                <div>
-                  <label className="text-[10px] font-medium text-amber-400/70 uppercase tracking-wider block mb-1.5">
-                    {showSlipFallback ? "Couldn't read the page — paste what the slip shows:" : "Bet slip details (optional)"}
-                  </label>
-                  <textarea
-                    value={betSlipText}
-                    onChange={e => setBetSlipText(e.target.value)}
-                    placeholder={"e.g.\nEngland vs Croatia — England Win @ 1.65\nArgentina vs Austria — Over 2.5 @ 1.80\nTotal odds: 2.97"}
-                    rows={5}
-                    className="w-full bg-white/5 border border-amber-500/20 rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/40 resize-none leading-relaxed"
-                  />
-                </div>
-              )}
-              {!showSlipFallback && !betSlipText && (
-                <button onClick={() => setShowSlipFallback(true)}
-                  className="text-xs text-white/30 hover:text-white/50 transition-colors">
-                  + Add bet details manually instead
-                </button>
-              )}
+
+              {/* Paste area — always shown */}
+              <div>
+                <label className="text-[10px] font-medium text-white/30 uppercase tracking-wider block mb-1.5">
+                  Paste your bet slip selections *
+                </label>
+                <textarea
+                  value={betSlipText}
+                  onChange={e => setBetSlipText(e.target.value)}
+                  placeholder={"England vs Croatia — England Win @ 1.65\nArgentina vs Austria — Over 2.5 Goals @ 1.80\nFrance vs Iraq — France Win @ 1.35\n\nTotal odds: 3.99  Stake: £10"}
+                  rows={6}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 focus:outline-none focus:border-cyan-500/40 resize-none leading-relaxed"
+                />
+              </div>
             </div>
           )}
 
@@ -1363,7 +1367,7 @@ export default function AIPicksPanel() {
               || (mode === "specific" && (!homeTeam || !awayTeam))
               || ((mode === "recommendations" || mode === "acca" || mode === "upsets") && !hasUpcoming)
               || (mode === "custom" && !betDescription.trim())
-              || (mode === "betslip" && !betSlipUrl.trim() && !betSlipText.trim())
+              || (mode === "betslip" && !betSlipText.trim())
             }
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl disabled:opacity-40 text-sm font-bold transition-all ${
               mode === "acca"      ? "bg-purple-500 hover:bg-purple-400 text-white"
