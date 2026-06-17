@@ -110,6 +110,52 @@ Return ONLY a valid JSON array, no markdown:
 [{"match":"Team A vs Team B","homeTeam":"Team A","awayTeam":"Team B","date":"${date}","summary":"Expert preview","homeWinProb":55,"drawProb":22,"awayWinProb":23,"keyStats":["stat 1","stat 2","stat 3","stat 4"],"recommendedBet":{"market":"Match Result","prediction":"Home Win","reasoning":"Why this is value","confidence":"High"},"oddsFound":{"homeWin":1.95,"draw":3.50,"awayWin":3.80,"source":"Gamdom/Rollbit"},"expectedValue":0.07,"kellyFraction":0.10,"stakeRating":"High Stake","stakeReasoning":"Strong value","risksToConsider":["Risk 1","Risk 2"]}]`;
 }
 
+export interface CustomBetResult {
+  betDescription: string;
+  probability: number;        // 0–100
+  fairOdds: number;           // decimal odds implied by probability
+  offeredOdds: number | null; // odds the user entered
+  expectedValue: number | null;
+  kellyFraction: number | null;
+  stakeRating: "High Stake" | "Medium Stake" | "Low Stake" | "Skip" | "No odds provided";
+  verdict: "Value Bet" | "Fair" | "Poor Value" | "No odds provided";
+  reasoning: string;
+  keyFactors: string[];
+  risks: string[];
+}
+
+function buildCustomBetPrompt(betDescription: string, offeredOdds: number | null, bankroll: number | null) {
+  const oddsLine = offeredOdds
+    ? `The bookmaker (Gamdom/Rollbit/BetPanda/Betplay) is offering decimal odds of ${offeredOdds} for this bet.`
+    : "No bookmaker odds have been provided — just estimate the probability and fair odds.";
+
+  return `You are an elite football betting analyst with deep World Cup 2026 knowledge. Today is ${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}.
+
+A punter wants to evaluate this bet:
+"${betDescription}"
+
+${oddsLine}
+${bankroll ? `Punter's bankroll: £${bankroll}` : ""}
+
+Your job:
+1. Estimate the true probability (%) of this bet winning based on your WC2026 knowledge
+2. Calculate fair decimal odds = 100 / probability
+3. If offered odds are given: calculate EV = (p*(offeredOdds-1)) - (1-p) and Kelly k = (p*(offeredOdds-1)-(1-p))/(offeredOdds-1)
+4. Give a clear verdict: is this value?
+
+stakeRating rules (only when odds provided):
+- "High Stake" if kelly > 0.08 AND probability confidence is high
+- "Medium Stake" if kelly 0.04–0.08
+- "Low Stake" if kelly 0.01–0.04
+- "Skip" if kelly ≤ 0 (negative EV)
+- "No odds provided" if no odds given
+
+verdict: "Value Bet" if EV > 0, "Fair" if EV ≈ 0 (within ±2%), "Poor Value" if EV < -0.02, "No odds provided" if no odds given
+
+Return ONLY this JSON object, no markdown:
+{"betDescription":"${betDescription}","probability":62,"fairOdds":1.61,"offeredOdds":${offeredOdds ?? null},"expectedValue":${offeredOdds ? "0.05" : null},"kellyFraction":${offeredOdds ? "0.08" : null},"stakeRating":"${offeredOdds ? "Medium Stake" : "No odds provided"}","verdict":"${offeredOdds ? "Value Bet" : "No odds provided"}","reasoning":"Clear 2-3 sentence explanation of why this probability is right and whether the odds represent value","keyFactors":["Factor supporting this probability","Another key factor","Third factor"],"risks":["Main risk to this bet","Second risk"]}`;
+}
+
 function buildAccaPrompt(date: string) {
   const fixtureCtx = getFixtureContext(date);
   const d = new Date(date).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -166,8 +212,8 @@ function extractJson(text: string): unknown {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { mode, homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll, apiKey } =
-      body;
+    const { mode, homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll, apiKey,
+            betDescription, offeredOdds } = body;
 
     const key = apiKey || process.env.GROQ_API_KEY;
     if (!key) {
@@ -190,6 +236,18 @@ export async function POST(req: NextRequest) {
       const text = await callGroq(buildAccaPrompt(targetDate), key);
       const acca = extractJson(text) as AccaResult;
       return NextResponse.json(acca);
+    }
+
+    if (mode === "custom") {
+      if (!betDescription) {
+        return NextResponse.json({ error: "betDescription is required" }, { status: 400 });
+      }
+      const text = await callGroq(
+        buildCustomBetPrompt(betDescription, offeredOdds ?? null, bankroll ?? null),
+        key
+      );
+      const result = extractJson(text) as CustomBetResult;
+      return NextResponse.json(result);
     }
 
     if (!homeTeam || !awayTeam || !date) {

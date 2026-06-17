@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import {
   Sparkles, Search, TrendingUp, TrendingDown, AlertTriangle, CheckCircle,
   XCircle, Loader2, ChevronDown, ChevronUp, Plus, Layers, ChevronLeft,
-  ChevronRight, Calendar, BarChart2, RefreshCw, Zap,
+  ChevronRight, Calendar, BarChart2, RefreshCw, Zap, MessageSquare,
 } from "lucide-react";
-import type { AnalysisResult, AccaResult } from "@/app/api/analyse/route";
+import type { AnalysisResult, AccaResult, CustomBetResult } from "@/app/api/analyse/route";
 import type { OddsComparison } from "@/app/api/odds/route";
 import { getFixturesForDate, isPlayed, type Fixture } from "@/data/fixtures";
 import { useApp } from "@/context/AppContext";
@@ -364,6 +364,124 @@ function AccaCard({ acca, bankroll }: { acca: AccaResult; bankroll: number }) {
   );
 }
 
+/* ── Custom Bet Result Card ── */
+function CustomBetCard({ result, bankroll }: { result: CustomBetResult; bankroll: number }) {
+  const isValue   = result.verdict === "Value Bet";
+  const isPoor    = result.verdict === "Poor Value";
+  const noOdds    = result.verdict === "No odds provided";
+  const fairImplied = result.fairOdds > 0 ? (100 / result.fairOdds).toFixed(1) : null;
+
+  const suggestedStake =
+    bankroll > 0 && result.kellyFraction && result.kellyFraction > 0
+      ? (bankroll * result.kellyFraction * 0.25).toFixed(2)
+      : null;
+
+  const verdictStyle = isValue  ? "bg-green-500/15 border-green-500/25 text-green-400"
+    : isPoor  ? "bg-red-500/15 border-red-500/25 text-red-400"
+    : noOdds  ? "bg-white/5 border-white/10 text-white/50"
+    : "bg-amber-500/15 border-amber-500/25 text-amber-400";
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/3 overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-white/6">
+        <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider mb-1">Your Bet</p>
+        <p className="text-sm font-semibold text-white leading-relaxed">"{result.betDescription}"</p>
+      </div>
+
+      <div className="px-5 py-4 space-y-4">
+        {/* Big probability + verdict */}
+        <div className="flex items-center gap-4">
+          <div className="text-center">
+            <p className="text-4xl font-black text-white">{result.probability}<span className="text-xl text-white/40">%</span></p>
+            <p className="text-[10px] text-white/30 mt-0.5">Estimated chance</p>
+          </div>
+          <div className="flex-1 space-y-2">
+            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold ${verdictStyle}`}>
+              {isValue ? <CheckCircle className="h-3.5 w-3.5" /> : isPoor ? <XCircle className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+              {result.verdict}
+            </div>
+            <div className="flex gap-3 text-xs flex-wrap">
+              <span><span className="text-white/30">Fair odds: </span><span className="text-white font-bold">{result.fairOdds.toFixed(2)}</span></span>
+              {fairImplied && <span><span className="text-white/30">= </span><span className="text-white/60">{fairImplied}% implied</span></span>}
+              {result.offeredOdds && <span><span className="text-white/30">Offered: </span><span className={`font-bold ${isValue ? "text-green-400" : isPoor ? "text-red-400" : "text-white"}`}>{result.offeredOdds}</span></span>}
+            </div>
+          </div>
+        </div>
+
+        {/* Probability bar */}
+        <div>
+          <div className="h-3 rounded-full bg-white/5 overflow-hidden">
+            <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-400 transition-all"
+              style={{ width: `${result.probability}%` }} />
+          </div>
+          <div className="flex justify-between mt-1 text-[10px] text-white/25">
+            <span>0%</span><span>50%</span><span>100%</span>
+          </div>
+        </div>
+
+        {/* EV + Kelly + stake */}
+        {(result.expectedValue !== null || result.kellyFraction !== null) && (
+          <div className="flex gap-4 text-xs flex-wrap bg-white/3 border border-white/6 rounded-xl px-4 py-3">
+            {result.expectedValue !== null && (
+              <span>
+                <span className="text-white/30">Expected Value: </span>
+                <span className={result.expectedValue >= 0 ? "text-green-400 font-bold" : "text-red-400 font-bold"}>
+                  {result.expectedValue >= 0 ? "+" : ""}{(result.expectedValue * 100).toFixed(1)}%
+                </span>
+              </span>
+            )}
+            {result.kellyFraction !== null && (
+              <span>
+                <span className="text-white/30">Kelly: </span>
+                <span className="text-white/70 font-medium">{(result.kellyFraction * 100).toFixed(1)}%</span>
+              </span>
+            )}
+            {suggestedStake && (
+              <span>
+                <span className="text-white/30">Suggested stake: </span>
+                <span className="text-amber-400 font-bold">£{suggestedStake}</span>
+                <span className="text-white/20 ml-1">(¼ Kelly)</span>
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Reasoning */}
+        <p className="text-sm text-white/60 leading-relaxed">{result.reasoning}</p>
+
+        {/* Key factors */}
+        {result.keyFactors.length > 0 && (
+          <div>
+            <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">Key Factors</p>
+            <ul className="space-y-1.5">
+              {result.keyFactors.map((f, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-white/60">
+                  <CheckCircle className="h-3.5 w-3.5 text-green-400/60 mt-0.5 flex-shrink-0" />{f}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Risks */}
+        {result.risks.length > 0 && (
+          <div>
+            <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">Risks</p>
+            <ul className="space-y-1.5">
+              {result.risks.map((r, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-white/60">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-400/60 mt-0.5 flex-shrink-0" />{r}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── Odds Comparison Table ── */
 function OddsPanel({
   homeTeam, awayTeam,
@@ -513,7 +631,7 @@ function OddsPanel({
 }
 
 /* ── Main Panel ── */
-type Mode = "recommendations" | "acca" | "specific";
+type Mode = "recommendations" | "acca" | "specific" | "custom";
 
 export default function AIPicksPanel() {
   const { tips } = useApp();
@@ -523,10 +641,15 @@ export default function AIPicksPanel() {
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState("");
   const [results, setResults]     = useState<AnalysisResult[]>([]);
-  const [acca, setAcca]           = useState<AccaResult | null>(null);
-  const [apiKey, setApiKey]       = useState("");
-  const [bankroll, setBankroll]   = useState<number | "">(200);
+  const [acca, setAcca]             = useState<AccaResult | null>(null);
+  const [customResult, setCustomResult] = useState<CustomBetResult | null>(null);
+  const [apiKey, setApiKey]         = useState("");
+  const [bankroll, setBankroll]     = useState<number | "">(200);
   const [pickedDate, setPickedDate] = useState(today);
+
+  // Custom bet form
+  const [betDescription, setBetDescription] = useState("");
+  const [offeredOdds, setOfferedOdds]       = useState<number | "">("");
 
   // Specific match form
   const [homeTeam, setHomeTeam]   = useState("");
@@ -549,6 +672,7 @@ export default function AIPicksPanel() {
     setMode(m);
     setResults([]);
     setAcca(null);
+    setCustomResult(null);
     setError("");
   }
 
@@ -568,6 +692,7 @@ export default function AIPicksPanel() {
     setError("");
     setResults([]);
     setAcca(null);
+    setCustomResult(null);
 
     try {
       let bodyData: Record<string, unknown>;
@@ -575,6 +700,11 @@ export default function AIPicksPanel() {
         bodyData = { mode: "recommendations", date: pickedDate, bankroll: bankroll || undefined, apiKey };
       } else if (mode === "acca") {
         bodyData = { mode: "acca", date: pickedDate, bankroll: bankroll || undefined, apiKey };
+      } else if (mode === "custom") {
+        bodyData = {
+          mode: "custom", betDescription, offeredOdds: offeredOdds || undefined,
+          bankroll: bankroll || undefined, apiKey,
+        };
       } else {
         bodyData = {
           mode: "specific", homeTeam, awayTeam, date: matchDate,
@@ -594,6 +724,7 @@ export default function AIPicksPanel() {
 
       if (mode === "recommendations") setResults(data.tips ?? []);
       else if (mode === "acca") setAcca(data as AccaResult);
+      else if (mode === "custom") setCustomResult(data as CustomBetResult);
       else setResults([data]);
     } catch {
       setError("Network error — check your connection");
@@ -607,10 +738,12 @@ export default function AIPicksPanel() {
 
   const btnLabel = mode === "recommendations" ? "Get Best Bets"
     : mode === "acca" ? "Build AI Acca"
+    : mode === "custom" ? "Evaluate My Bet"
     : "Analyse Match";
 
   const loadingLabel = mode === "recommendations" ? "Finding best bets…"
     : mode === "acca" ? "Building acca…"
+    : mode === "custom" ? "Evaluating bet…"
     : "Analysing match…";
 
   return (
@@ -648,6 +781,10 @@ export default function AIPicksPanel() {
               <button onClick={() => switchMode("specific")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${mode === "specific" ? "bg-amber-500/20 text-amber-400" : "text-white/40 hover:text-white/60"}`}>
                 <Sparkles className="h-3 w-3" /> Analyse Match
+              </button>
+              <button onClick={() => switchMode("custom")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${mode === "custom" ? "bg-teal-500/20 text-teal-400" : "text-white/40 hover:text-white/60"}`}>
+                <MessageSquare className="h-3 w-3" /> Custom Bet
               </button>
             </div>
             <div className="flex items-center gap-1.5 ml-auto">
@@ -733,14 +870,51 @@ export default function AIPicksPanel() {
             </div>
           )}
 
+          {/* Custom bet form */}
+          {mode === "custom" && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-medium text-white/30 uppercase tracking-wider block mb-1.5">
+                  Describe your bet
+                </label>
+                <textarea
+                  value={betDescription}
+                  onChange={e => setBetDescription(e.target.value)}
+                  placeholder="e.g. England to win Group L, Mbappe to score anytime vs Iraq, Over 2.5 goals in Argentina vs Austria…"
+                  rows={3}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/40 resize-none leading-relaxed"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-white/30 uppercase tracking-wider block mb-1.5">
+                  Bookmaker odds (optional)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={offeredOdds}
+                    onChange={e => setOfferedOdds(parseFloat(e.target.value) || "")}
+                    step="0.01"
+                    min="1"
+                    placeholder="e.g. 2.50"
+                    className="w-36 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-teal-500/40"
+                  />
+                  <p className="text-xs text-white/30">decimal odds — AI will assess if it&#39;s value</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <button onClick={runAnalysis}
-            disabled={loading || (mode === "specific" && (!homeTeam || !awayTeam)) || ((mode === "recommendations" || mode === "acca") && !hasUpcoming)}
+            disabled={loading || (mode === "specific" && (!homeTeam || !awayTeam)) || ((mode === "recommendations" || mode === "acca") && !hasUpcoming) || (mode === "custom" && !betDescription.trim())}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl disabled:opacity-40 text-sm font-bold transition-all ${
-              mode === "acca" ? "bg-purple-500 hover:bg-purple-400 text-white" : "bg-amber-500 hover:bg-amber-400 text-black"
+              mode === "acca" ? "bg-purple-500 hover:bg-purple-400 text-white"
+              : mode === "custom" ? "bg-teal-500 hover:bg-teal-400 text-black"
+              : "bg-amber-500 hover:bg-amber-400 text-black"
             }`}>
             {loading
               ? <><Loader2 className="h-4 w-4 animate-spin" />{loadingLabel}</>
-              : <>{mode === "acca" ? <Layers className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}{btnLabel}</>
+              : <>{mode === "acca" ? <Layers className="h-4 w-4" /> : mode === "custom" ? <MessageSquare className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}{btnLabel}</>
             }
           </button>
 
@@ -762,6 +936,8 @@ export default function AIPicksPanel() {
       </div>
 
       {acca && <AccaCard acca={acca} bankroll={Number(bankroll) || 0} />}
+
+      {customResult && <CustomBetCard result={customResult} bankroll={Number(bankroll) || 0} />}
 
       {results.length > 0 && (
         <div className="space-y-4">
