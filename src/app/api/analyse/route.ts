@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 
 export interface AnalysisResult {
@@ -46,140 +45,104 @@ function buildMatchPrompt(
 ) {
   const oddsCtx =
     homeOdds || drawOdds || awayOdds
-      ? `User's current odds from Gamdom/Rollbit — Home: ${homeOdds ?? "?"}, Draw: ${drawOdds ?? "?"}, Away: ${awayOdds ?? "?"}`
-      : "No odds provided — estimate typical market odds for this fixture.";
+      ? `Current odds from Gamdom/Rollbit — Home: ${homeOdds ?? "N/A"}, Draw: ${drawOdds ?? "N/A"}, Away: ${awayOdds ?? "N/A"}`
+      : "No odds provided — use typical market odds based on team quality.";
 
-  return `You are an elite football betting analyst with deep knowledge of World Cup 2026. Analyse this match:
+  return `You are an elite football betting analyst with deep World Cup 2026 knowledge. Analyse this match and return ONLY valid JSON.
 
-${homeTeam} vs ${awayTeam} on ${date}
-
+Match: ${homeTeam} vs ${awayTeam} on ${date}
 ${oddsCtx}
-${bankroll ? `User bankroll: £${bankroll}` : ""}
+${bankroll ? `Bankroll: £${bankroll}` : ""}
 
-Using your knowledge of these teams' World Cup 2026 performances, historical head-to-head records, squad quality, player strengths, and typical bookmaker odds for this type of fixture, provide a detailed expert analysis.
+Kelly formula: k = (p*(b-1)-(1-p))/(b-1) where b=decimal odds, p=win prob as decimal
+EV: (p*(odds-1))-(1-p) as decimal
+stakeRating: "High Stake" if kelly>0.08 AND High confidence, "Medium Stake" if kelly 0.04-0.08, "Low Stake" if kelly 0.01-0.04, "Skip" if kelly<=0
 
-Respond in EXACTLY this JSON format (no markdown, just raw JSON):
-{
-  "match": "${homeTeam} vs ${awayTeam}",
-  "homeTeam": "${homeTeam}",
-  "awayTeam": "${awayTeam}",
-  "date": "${date}",
-  "summary": "2-3 sentence expert match preview",
-  "homeWinProb": 45,
-  "drawProb": 25,
-  "awayWinProb": 30,
-  "keyStats": [
-    "Stat about home team form",
-    "Stat about away team form",
-    "Head-to-head fact",
-    "Tournament context fact"
-  ],
-  "recommendedBet": {
-    "market": "Match Result",
-    "prediction": "Home Win",
-    "reasoning": "Detailed reasoning for this pick",
-    "confidence": "High"
-  },
-  "oddsFound": {
-    "homeWin": 2.10,
-    "draw": 3.40,
-    "awayWin": 3.20,
-    "source": "Rollbit / market average"
-  },
-  "expectedValue": 0.05,
-  "kellyFraction": 0.08,
-  "stakeRating": "High Stake",
-  "stakeReasoning": "Why to stake high/medium/low/skip",
-  "risksToConsider": [
-    "Risk factor 1",
-    "Risk factor 2"
-  ]
-}
-
-Kelly Criterion: k = (p × (b) − (1−p)) / b where b = decimal_odds − 1. Use the odds for the recommended bet.
-EV: (p × profit) − (1−p × stake). Express as fraction of stake.
-stakeRating: "High Stake" if kelly > 0.08 AND confidence High, "Medium Stake" if kelly 0.04-0.08, "Low Stake" if kelly 0.01-0.04, "Skip" if kelly ≤ 0.`;
+Return ONLY this JSON object, no markdown, no extra text:
+{"match":"${homeTeam} vs ${awayTeam}","homeTeam":"${homeTeam}","awayTeam":"${awayTeam}","date":"${date}","summary":"Expert 2-3 sentence preview with key factors","homeWinProb":45,"drawProb":25,"awayWinProb":30,"keyStats":["Form stat","Squad quality","Head-to-head record","Tournament context"],"recommendedBet":{"market":"Match Result","prediction":"Home Win","reasoning":"Specific value reasoning","confidence":"High"},"oddsFound":{"homeWin":2.10,"draw":3.40,"awayWin":3.20,"source":"Gamdom/Rollbit estimate"},"expectedValue":0.05,"kellyFraction":0.08,"stakeRating":"High Stake","stakeReasoning":"Good edge with high confidence pick","risksToConsider":["Risk 1","Risk 2"]}`;
 }
 
 function buildRecommendationsPrompt() {
-  return `You are an elite football betting analyst with deep knowledge of World Cup 2026. Today is ${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}.
+  const today = new Date().toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  return `You are an elite football betting analyst with deep World Cup 2026 knowledge. Today is ${today}.
 
-Using your knowledge of the World Cup 2026 group stage and knockout rounds, identify the 3 best value bets from upcoming matches. Consider team form, squad quality, head-to-head history, and typical market odds on Gamdom, Rollbit and mainstream bookmakers.
+Find 3 best value betting opportunities from World Cup 2026 matches. Analyse team quality, form, head-to-head, and typical Gamdom/Rollbit odds.
 
-For each match return analysis in this EXACT JSON format. Respond with ONLY a JSON array, no markdown:
-[
-  {
-    "match": "Team A vs Team B",
-    "homeTeam": "Team A",
-    "awayTeam": "Team B",
-    "date": "YYYY-MM-DD",
-    "summary": "2-3 sentence expert preview",
-    "homeWinProb": 55,
-    "drawProb": 22,
-    "awayWinProb": 23,
-    "keyStats": ["stat 1", "stat 2", "stat 3", "stat 4"],
-    "recommendedBet": {
-      "market": "Match Result",
-      "prediction": "Home Win",
-      "reasoning": "Detailed reasoning",
-      "confidence": "High"
-    },
-    "oddsFound": {
-      "homeWin": 1.95,
-      "draw": 3.50,
-      "awayWin": 3.80,
-      "source": "Rollbit / Gamdom average"
-    },
-    "expectedValue": 0.07,
-    "kellyFraction": 0.10,
-    "stakeRating": "High Stake",
-    "stakeReasoning": "Strong form, good value odds",
-    "risksToConsider": ["risk 1", "risk 2"]
-  }
-]
+Kelly formula: k = (p*(b-1)-(1-p))/(b-1) where b=decimal odds, p=win prob as decimal
+EV: (p*(odds-1))-(1-p) as decimal
+stakeRating: "High Stake" if kelly>0.08 AND High confidence, "Medium Stake" if kelly 0.04-0.08, "Low Stake" if kelly 0.01-0.04, "Skip" if kelly<=0
 
-Find 3 genuinely good value picks. Mark stakeRating "Skip" if odds are poor value. Include real odds you find.`;
+Return ONLY a valid JSON array, no markdown, no extra text:
+[{"match":"Team A vs Team B","homeTeam":"Team A","awayTeam":"Team B","date":"2026-06-17","summary":"Expert 2-3 sentence preview","homeWinProb":55,"drawProb":22,"awayWinProb":23,"keyStats":["Key stat 1","Key stat 2","Key stat 3","Key stat 4"],"recommendedBet":{"market":"Match Result","prediction":"Home Win","reasoning":"Why this is value","confidence":"High"},"oddsFound":{"homeWin":1.95,"draw":3.50,"awayWin":3.80,"source":"Gamdom/Rollbit estimate"},"expectedValue":0.07,"kellyFraction":0.10,"stakeRating":"High Stake","stakeReasoning":"Strong value — underpriced team","risksToConsider":["Risk 1","Risk 2"]}]
+
+Give 3 real World Cup 2026 fixtures with genuine analysis and value reasoning.`;
 }
 
-async function runAgentLoop(prompt: string, apiKey: string): Promise<string> {
-  const client = new Anthropic({ apiKey });
-  const response = await client.messages.create({
-    model: "claude-3-5-sonnet-20241022",
-    max_tokens: 2000,
-    messages: [{ role: "user", content: prompt }],
+async function callAnthropic(prompt: string, apiKey: string): Promise<string> {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-3-5-sonnet-20241022",
+      max_tokens: 2048,
+      messages: [{ role: "user", content: prompt }],
+    }),
   });
-  const textBlock = response.content.find((b) => b.type === "text");
-  return textBlock?.type === "text" ? textBlock.text : "";
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Anthropic API ${response.status}: ${errText}`);
+  }
+
+  const data = (await response.json()) as {
+    content: Array<{ type: string; text?: string }>;
+  };
+  const block = data.content.find((b) => b.type === "text");
+  return block?.text ?? "";
 }
 
 function extractJson(text: string): unknown {
   const trimmed = text.trim();
-  const jsonMatch = trimmed.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
-  if (!jsonMatch) throw new Error("No JSON found in response");
-  return JSON.parse(jsonMatch[0]);
+  const match = trimmed.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
+  if (!match) throw new Error(`No JSON in response: ${trimmed.slice(0, 300)}`);
+  return JSON.parse(match[0]);
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { mode, homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll, apiKey } = body;
+    const { mode, homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll, apiKey } =
+      body;
 
     const key = apiKey || process.env.ANTHROPIC_API_KEY;
     if (!key) {
-      return NextResponse.json({ error: "No API key provided." }, { status: 503 });
+      return NextResponse.json({ error: "No API key. Add it in Settings." }, { status: 503 });
     }
 
     if (mode === "recommendations") {
-      const text = await runAgentLoop(buildRecommendationsPrompt(), key);
-      const tips = extractJson(text) as AnalysisResult[];
+      const text = await callAnthropic(buildRecommendationsPrompt(), key);
+      const parsed = extractJson(text);
+      const tips = Array.isArray(parsed) ? parsed : [parsed];
       return NextResponse.json({ tips, searchedAt: new Date().toISOString() });
     }
 
     if (!homeTeam || !awayTeam || !date) {
-      return NextResponse.json({ error: "homeTeam, awayTeam and date are required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "homeTeam, awayTeam and date are required" },
+        { status: 400 }
+      );
     }
 
-    const text = await runAgentLoop(
+    const text = await callAnthropic(
       buildMatchPrompt(homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll),
       key
     );
