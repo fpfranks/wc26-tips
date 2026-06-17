@@ -47,23 +47,18 @@ function buildMatchPrompt(
   const oddsCtx =
     homeOdds || drawOdds || awayOdds
       ? `User's current odds from Gamdom/Rollbit — Home: ${homeOdds ?? "?"}, Draw: ${drawOdds ?? "?"}, Away: ${awayOdds ?? "?"}`
-      : "No odds provided yet — search for typical market odds on this game.";
+      : "No odds provided — estimate typical market odds for this fixture.";
 
-  return `You are an elite football betting analyst. Analyse this World Cup 2026 match:
+  return `You are an elite football betting analyst with deep knowledge of World Cup 2026. Analyse this match:
 
 ${homeTeam} vs ${awayTeam} on ${date}
 
 ${oddsCtx}
 ${bankroll ? `User bankroll: £${bankroll}` : ""}
 
-Search the web for:
-- Current form of both teams (last 5 matches in this tournament and recent internationals)
-- Head-to-head record
-- Key injuries or suspensions
-- Market odds from crypto sportsbooks (Gamdom, Rollbit) or mainstream bookmakers
-- Any tactical or squad news
+Using your knowledge of these teams' World Cup 2026 performances, historical head-to-head records, squad quality, player strengths, and typical bookmaker odds for this type of fixture, provide a detailed expert analysis.
 
-Then respond in EXACTLY this JSON format (no markdown, just raw JSON):
+Respond in EXACTLY this JSON format (no markdown, just raw JSON):
 {
   "match": "${homeTeam} vs ${awayTeam}",
   "homeTeam": "${homeTeam}",
@@ -107,9 +102,9 @@ stakeRating: "High Stake" if kelly > 0.08 AND confidence High, "Medium Stake" if
 }
 
 function buildRecommendationsPrompt() {
-  return `You are an elite football betting analyst. Today is ${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}.
+  return `You are an elite football betting analyst with deep knowledge of World Cup 2026. Today is ${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}.
 
-Search the web for the best upcoming World Cup 2026 matches in the next 48 hours. Find the top 3 value bets, looking at odds on Gamdom, Rollbit, or mainstream bookmakers.
+Using your knowledge of the World Cup 2026 group stage and knockout rounds, identify the 3 best value bets from upcoming matches. Consider team form, squad quality, head-to-head history, and typical market odds on Gamdom, Rollbit and mainstream bookmakers.
 
 For each match return analysis in this EXACT JSON format. Respond with ONLY a JSON array, no markdown:
 [
@@ -148,42 +143,13 @@ Find 3 genuinely good value picks. Mark stakeRating "Skip" if odds are poor valu
 
 async function runAgentLoop(prompt: string, apiKey: string): Promise<string> {
   const client = new Anthropic({ apiKey });
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
-  let finalText = "";
-
-  for (let i = 0; i < 8; i++) {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4000,
-      tools: [{ type: "web_search_20250305" as const, name: "web_search" }],
-      messages,
-    });
-
-    const textBlock = response.content.find((b) => b.type === "text");
-    if (textBlock?.type === "text") finalText = textBlock.text;
-
-    if (response.stop_reason === "end_turn") break;
-
-    if (response.stop_reason === "tool_use") {
-      messages.push({ role: "assistant", content: response.content });
-      const toolResults: Anthropic.ToolResultBlockParam[] = response.content
-        .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
-        .map((b) => ({
-          type: "tool_result" as const,
-          tool_use_id: b.id,
-          content: JSON.stringify((b as unknown as { content: unknown }).content ?? ""),
-        }));
-      if (toolResults.length) {
-        messages.push({ role: "user", content: toolResults });
-      } else {
-        break;
-      }
-    } else {
-      break;
-    }
-  }
-
-  return finalText;
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 4000,
+    messages: [{ role: "user", content: prompt }],
+  });
+  const textBlock = response.content.find((b) => b.type === "text");
+  return textBlock?.type === "text" ? textBlock.text : "";
 }
 
 function extractJson(text: string): unknown {

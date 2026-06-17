@@ -346,7 +346,7 @@ export default function AIPicksPanel() {
 
           {loading && (
             <p className="text-xs text-white/30 animate-pulse">
-              Searching Gamdom, Rollbit, form guides, head-to-head records…
+              Analysing form, head-to-head, squad quality, market odds…
             </p>
           )}
 
