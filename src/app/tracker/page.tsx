@@ -28,10 +28,13 @@ export default function TrackerPage() {
 
   const filtered = filter === "all" ? bets : bets.filter(b => b.status === filter);
 
-  const settled     = bets.filter(b => b.status !== "open");
-  const won         = bets.filter(b => b.status === "won");
-  const totalStaked = settled.reduce((s, b) => s + b.stake, 0);
-  const totalProfit = settled.reduce((s, b) => s + b.profit, 0);
+  const settled          = bets.filter(b => b.status !== "open");
+  const open             = bets.filter(b => b.status === "open");
+  const won              = bets.filter(b => b.status === "won");
+  const totalStaked      = settled.reduce((s, b) => s + b.stake, 0);
+  const totalProfit      = settled.reduce((s, b) => s + b.profit, 0);
+  const openPotentialReturn = open.reduce((s, b) => s + b.potentialReturn, 0);
+  const openStaked       = open.reduce((s, b) => s + b.stake, 0);
 
   const counts = {
     all:  bets.length,
@@ -65,13 +68,14 @@ export default function TrackerPage() {
         </div>
 
         {/* P&L summary */}
-        {settled.length > 0 && (
-          <div className="grid grid-cols-3 gap-4">
+        {(settled.length > 0 || open.length > 0) && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="rounded-2xl border border-white/8 bg-white/3 px-5 py-4">
               <p className="text-[10px] font-medium uppercase tracking-wider text-white/40 mb-1">Total P&amp;L</p>
               <p className={`text-2xl font-bold ${totalProfit >= 0 ? "text-green-400" : "text-red-400"}`}>
-                {fmtProfit(totalProfit)}
+                {settled.length === 0 ? "£0.00" : fmtProfit(totalProfit)}
               </p>
+              <p className="text-xs text-white/30 mt-0.5">{settled.length} settled</p>
             </div>
             <div className="rounded-2xl border border-white/8 bg-white/3 px-5 py-4">
               <p className="text-[10px] font-medium uppercase tracking-wider text-white/40 mb-1">Win Rate</p>
@@ -85,6 +89,15 @@ export default function TrackerPage() {
               <p className="text-2xl font-bold text-white">£{totalStaked.toFixed(2)}</p>
               <p className={`text-xs mt-0.5 ${totalProfit >= 0 ? "text-green-400/60" : "text-red-400/60"}`}>
                 ROI: {totalStaked > 0 ? `${((totalProfit / totalStaked) * 100).toFixed(1)}%` : "0%"}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-amber-400/60 mb-1">Open Potential Return</p>
+              <p className="text-2xl font-bold text-amber-400">
+                {open.length === 0 ? "£0.00" : `£${openPotentialReturn.toFixed(2)}`}
+              </p>
+              <p className="text-xs text-white/30 mt-0.5">
+                {open.length} open · £{openStaked.toFixed(2)} staked
               </p>
             </div>
           </div>
