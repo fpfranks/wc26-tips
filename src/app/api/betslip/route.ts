@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
 
     const key = apiKey || process.env.GROQ_API_KEY;
     if (!key) return NextResponse.json({ error: "No Groq API key. Add it in Settings." }, { status: 503 });
-    if (!url) return NextResponse.json({ error: "URL is required" }, { status: 400 });
+    if (!pastedText) return NextResponse.json({ error: "Paste your bet slip selections first." }, { status: 400 });
 
     // Try to fetch the page
     const { text: pageContent, ok: couldReadPage } = await tryFetch(url);
