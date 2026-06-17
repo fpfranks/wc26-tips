@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import {
   Sparkles, Search, TrendingUp, TrendingDown, AlertTriangle, CheckCircle,
   XCircle, Loader2, ChevronDown, ChevronUp, Plus, Layers, ChevronLeft,
-  ChevronRight, Calendar,
+  ChevronRight, Calendar, BarChart2, RefreshCw, Zap,
 } from "lucide-react";
 import type { AnalysisResult, AccaResult } from "@/app/api/analyse/route";
+import type { OddsComparison } from "@/app/api/odds/route";
 import { getFixturesForDate, isPlayed, type Fixture } from "@/data/fixtures";
 import { useApp } from "@/context/AppContext";
 import AddTipModal from "./AddTipModal";
@@ -363,6 +364,154 @@ function AccaCard({ acca, bankroll }: { acca: AccaResult; bankroll: number }) {
   );
 }
 
+/* ── Odds Comparison Table ── */
+function OddsPanel({
+  homeTeam, awayTeam,
+  onOddsLoaded,
+}: {
+  homeTeam: string;
+  awayTeam: string;
+  onOddsLoaded: (h: number, d: number, a: number) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [data, setData]       = useState<OddsComparison | null>(null);
+  const [error, setError]     = useState("");
+
+  async function fetchOdds() {
+    const oddsApiKey = localStorage.getItem("wc26-odds-key");
+    if (!oddsApiKey) {
+      setError("Add your free Odds API key in Settings to fetch live odds from Rollbit, Gamdom, BetPanda & Betplay.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setData(null);
+    try {
+      const res = await fetch("/api/odds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ homeTeam, awayTeam, oddsApiKey }),
+      });
+      const json = await res.json() as OddsComparison & { error?: string };
+      if (!res.ok || json.error) { setError(json.error ?? "Failed to fetch odds"); return; }
+      setData(json);
+      // Auto-fill best odds into parent form
+      if (json.bestHomeWin && json.bestDraw && json.bestAwayWin) {
+        onOddsLoaded(json.bestHomeWin.odds, json.bestDraw.odds, json.bestAwayWin.odds);
+      }
+    } catch {
+      setError("Network error fetching odds");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const BOOKS = ["Rollbit", "Gamdom", "BetPanda", "Betplay"];
+
+  return (
+    <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-blue-500/10">
+        <BarChart2 className="h-3.5 w-3.5 text-blue-400" />
+        <span className="text-xs font-semibold text-blue-400">Live Odds — Rollbit · Gamdom · BetPanda · Betplay</span>
+        <button onClick={fetchOdds} disabled={loading || !homeTeam || !awayTeam}
+          className="ml-auto flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-500/15 text-blue-400 text-[11px] font-medium hover:bg-blue-500/25 disabled:opacity-40 transition-colors">
+          {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          {loading ? "Fetching…" : "Fetch Odds"}
+        </button>
+      </div>
+
+      {error && <p className="px-4 py-3 text-xs text-red-400">{error}{error.includes("Settings") && <a href="/settings" className="text-amber-400 ml-1 hover:underline">Settings →</a>}</p>}
+
+      {data && (
+        <div className="p-4 space-y-3">
+          {/* Arbitrage / mismatch alert */}
+          {data.arbitrage && (
+            <div className="flex items-center gap-2 rounded-lg bg-green-500/15 border border-green-500/25 px-3 py-2">
+              <Zap className="h-3.5 w-3.5 text-green-400 flex-shrink-0" />
+              <p className="text-xs font-semibold text-green-400">
+                Arbitrage detected! Best implied prob sum = {(data.impliedProbSum * 100).toFixed(1)}% — guaranteed profit possible.
+              </p>
+            </div>
+          )}
+          {!data.arbitrage && data.mismatchPct > 8 && (
+            <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
+              <p className="text-xs text-amber-400">
+                Odds mismatch of <span className="font-bold">{data.mismatchPct.toFixed(0)}%</span> detected between books — shop for best price.
+              </p>
+            </div>
+          )}
+
+          {/* Best odds highlight */}
+          {(data.bestHomeWin || data.bestDraw || data.bestAwayWin) && (
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: homeTeam, best: data.bestHomeWin },
+                { label: "Draw",   best: data.bestDraw },
+                { label: awayTeam, best: data.bestAwayWin },
+              ].map(({ label, best }) => best && (
+                <div key={label} className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-green-400/70 truncate">{label}</p>
+                  <p className="text-lg font-black text-green-400">{best.odds.toFixed(2)}</p>
+                  <p className="text-[10px] text-green-400/60 font-medium">{best.name}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Per-bookmaker table */}
+          {data.bookmakers.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-white/30">
+                    <th className="text-left py-1.5 pr-4">Book</th>
+                    <th className="text-center py-1.5 px-2">{homeTeam || "Home"}</th>
+                    <th className="text-center py-1.5 px-2">Draw</th>
+                    <th className="text-center py-1.5 px-2">{awayTeam || "Away"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* Show found bookmakers */}
+                  {data.bookmakers.map((bk, i) => (
+                    <tr key={i} className="border-t border-white/5">
+                      <td className="py-2 pr-4 font-medium text-white/70">{bk.name}</td>
+                      {[bk.homeWin, bk.draw, bk.awayWin].map((odds, j) => {
+                        const bests = [data.bestHomeWin?.odds, data.bestDraw?.odds, data.bestAwayWin?.odds][j];
+                        const isBest = odds !== null && odds === bests;
+                        return (
+                          <td key={j} className={`py-2 px-2 text-center font-bold ${odds === null ? "text-white/15" : isBest ? "text-green-400" : "text-white/60"}`}>
+                            {odds?.toFixed(2) ?? "—"}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                  {/* Placeholder rows for books with no data */}
+                  {BOOKS.filter(b => !data.bookmakers.find(bk => bk.name.toLowerCase().includes(b.toLowerCase()))).map(b => (
+                    <tr key={b} className="border-t border-white/5">
+                      <td className="py-2 pr-4 text-white/20">{b}</td>
+                      <td colSpan={3} className="py-2 px-2 text-center text-white/15 text-[10px]">not listed</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {data.bookmakers.length === 0 && (
+            <p className="text-xs text-white/30 text-center py-2">No odds found from Rollbit/Gamdom/BetPanda/Betplay for this match yet.</p>
+          )}
+
+          {(data.bestHomeWin || data.bestDraw || data.bestAwayWin) && (
+            <p className="text-[10px] text-blue-400/60">↑ Best odds auto-filled into the form above for AI analysis</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Main Panel ── */
 type Mode = "recommendations" | "acca" | "specific";
 
@@ -548,8 +697,8 @@ export default function AIPicksPanel() {
                 </div>
               </div>
 
-              <div className="border-t border-white/6 pt-3">
-                <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">Or enter manually</p>
+              <div className="border-t border-white/6 pt-3 space-y-3">
+                <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider">Or enter manually</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <input value={homeTeam} onChange={e => setHomeTeam(e.target.value)} placeholder="Home team *"
                     className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-amber-500/40" />
@@ -573,6 +722,13 @@ export default function AIPicksPanel() {
                       className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/40" />
                   </div>
                 </div>
+
+                {/* Live odds comparison */}
+                <OddsPanel
+                  homeTeam={homeTeam}
+                  awayTeam={awayTeam}
+                  onOddsLoaded={(h, d, a) => { setHomeOdds(h); setDrawOdds(d); setAwayOdds(a); }}
+                />
               </div>
             </div>
           )}
