@@ -5,13 +5,14 @@ import {
   Sparkles, Search, TrendingUp, TrendingDown, AlertTriangle, CheckCircle,
   XCircle, Loader2, ChevronDown, ChevronUp, Plus, Layers, ChevronLeft,
   ChevronRight, Calendar, BarChart2, RefreshCw, Zap, MessageSquare,
-  Trophy, Flame,
+  Trophy, Flame, ClipboardList,
 } from "lucide-react";
 import type { AnalysisResult, AccaResult, CustomBetResult, SimulatorResult, UpsetResult } from "@/app/api/analyse/route";
 import type { OddsComparison } from "@/app/api/odds/route";
 import { getFixturesForDate, isPlayed, type Fixture } from "@/data/fixtures";
 import { useApp } from "@/context/AppContext";
 import AddTipModal from "./AddTipModal";
+import AddBetModal from "./AddBetModal";
 
 const WC_START = "2026-06-11";
 const WC_END   = "2026-07-19";
@@ -316,7 +317,8 @@ function AnalysisCard({ analysis, bankroll }: { analysis: AnalysisResult; bankro
 
 /* ── Acca card ── */
 function AccaCard({ acca, bankroll }: { acca: AccaResult; bankroll: number }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded]     = useState(true);
+  const [showBetModal, setShowBetModal] = useState(false);
   const stake = STAKE_STYLES[acca.stakeRating];
   const StakeIcon = stake.icon;
   const suggestedStake =
@@ -324,7 +326,22 @@ function AccaCard({ acca, bankroll }: { acca: AccaResult; bankroll: number }) {
       ? (bankroll * acca.kellyFraction * 0.25).toFixed(2)
       : null;
 
+  const betPrefill = {
+    label: acca.title,
+    type: "acca" as const,
+    selections: acca.legs.map(leg => ({
+      match: leg.match,
+      market: leg.market,
+      prediction: leg.prediction,
+      odds: leg.odds,
+    })),
+  };
+
   return (
+    <>
+      {showBetModal && (
+        <AddBetModal onClose={() => setShowBetModal(false)} prefill={betPrefill} />
+      )}
     <div className="rounded-2xl border border-purple-500/25 bg-purple-500/5 overflow-hidden">
       <div className="px-5 py-4">
         <div className="flex items-start justify-between gap-4">
@@ -368,10 +385,16 @@ function AccaCard({ acca, bankroll }: { acca: AccaResult; bankroll: number }) {
         </div>
         <p className={`mt-1 text-xs font-medium ${stake.text}`}>{acca.stakeReasoning}</p>
 
-        <button onClick={() => setExpanded(!expanded)} className="mt-3 flex items-center gap-1 text-xs text-white/30 hover:text-white/60 transition-colors">
-          {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          {expanded ? "Hide legs" : `Show ${acca.legs.length} legs`}
-        </button>
+        <div className="mt-3 flex items-center gap-3">
+          <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 text-xs text-white/30 hover:text-white/60 transition-colors">
+            {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {expanded ? "Hide legs" : `Show ${acca.legs.length} legs`}
+          </button>
+          <button onClick={() => setShowBetModal(true)}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-semibold hover:bg-purple-500/30 transition-colors">
+            <ClipboardList className="h-3.5 w-3.5" /> Copy to Bet Tracker
+          </button>
+        </div>
       </div>
 
       {expanded && (
@@ -400,6 +423,7 @@ function AccaCard({ acca, bankroll }: { acca: AccaResult; bankroll: number }) {
         </div>
       )}
     </div>
+    </>
   );
 }
 

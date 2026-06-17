@@ -4,9 +4,21 @@ import { useState, useEffect, useRef } from "react";
 import { X, Plus, Trash2 } from "lucide-react";
 import { useApp, type Platform, type BetStatus, type BetSelection, type SelectionResult } from "@/context/AppContext";
 
+interface PrefillSelection {
+  match: string;
+  market: string;
+  prediction: string;
+  odds?: number;
+}
+
 interface Props {
   onClose: () => void;
   editId?: string;
+  prefill?: {
+    label?: string;
+    type?: "single" | "acca";
+    selections?: PrefillSelection[];
+  };
 }
 
 const PLATFORMS: Platform[] = ["Gamdom", "Rollbit", "Other"];
@@ -31,13 +43,17 @@ function emptySelection(): BetSelection {
   return { match: "", market: "Match Result", prediction: "", odds: 0, result: "pending" };
 }
 
-export default function AddBetModal({ onClose, editId }: Props) {
+export default function AddBetModal({ onClose, editId, prefill }: Props) {
   const { bets, addBet, updateBet } = useApp();
   const editing = editId ? bets.find(b => b.id === editId) : null;
 
-  const [type, setType]               = useState<"single" | "acca">(editing?.type ?? "single");
-  const [label, setLabel]             = useState(editing?.label ?? "");
-  const [selections, setSelections]   = useState<BetSelection[]>(editing?.selections ?? [emptySelection()]);
+  const initialSelections: BetSelection[] = editing?.selections
+    ?? prefill?.selections?.map(s => ({ match: s.match, market: s.market, prediction: s.prediction, odds: s.odds ?? 0, result: "pending" as const }))
+    ?? [emptySelection()];
+
+  const [type, setType]               = useState<"single" | "acca">(editing?.type ?? prefill?.type ?? (initialSelections.length > 1 ? "acca" : "single"));
+  const [label, setLabel]             = useState(editing?.label ?? prefill?.label ?? "");
+  const [selections, setSelections]   = useState<BetSelection[]>(initialSelections);
   const [stake, setStake]             = useState(editing?.stake ?? 0);
   const [platform, setPlatform]       = useState<Platform>(editing?.platform ?? "Gamdom");
   const [status, setStatus]           = useState<BetStatus>(editing?.status ?? "open");
