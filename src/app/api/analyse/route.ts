@@ -83,36 +83,35 @@ Return ONLY a valid JSON array, no markdown, no extra text:
 Give 3 real World Cup 2026 fixtures with genuine analysis and value reasoning.`;
 }
 
-async function callAnthropic(prompt: string, apiKey: string): Promise<string> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+async function callGemini(prompt: string, apiKey: string): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const response = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 2048,
-      messages: [{ role: "user", content: prompt }],
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
     }),
   });
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`Anthropic API ${response.status}: ${errText}`);
+    throw new Error(`Gemini API ${response.status}: ${errText}`);
   }
 
   const data = (await response.json()) as {
-    content: Array<{ type: string; text?: string }>;
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string }> };
+    }>;
   };
-  const block = data.content.find((b) => b.type === "text");
-  return block?.text ?? "";
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 }
 
 function extractJson(text: string): unknown {
   const trimmed = text.trim();
-  const match = trimmed.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
+  // Strip markdown code fences if present
+  const stripped = trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const match = stripped.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
   if (!match) throw new Error(`No JSON in response: ${trimmed.slice(0, 300)}`);
   return JSON.parse(match[0]);
 }
@@ -123,13 +122,13 @@ export async function POST(req: NextRequest) {
     const { mode, homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll, apiKey } =
       body;
 
-    const key = apiKey || process.env.ANTHROPIC_API_KEY;
+    const key = apiKey || process.env.GEMINI_API_KEY;
     if (!key) {
-      return NextResponse.json({ error: "No API key. Add it in Settings." }, { status: 503 });
+      return NextResponse.json({ error: "No API key. Add your free Gemini key in Settings." }, { status: 503 });
     }
 
     if (mode === "recommendations") {
-      const text = await callAnthropic(buildRecommendationsPrompt(), key);
+      const text = await callGemini(buildRecommendationsPrompt(), key);
       const parsed = extractJson(text);
       const tips = Array.isArray(parsed) ? parsed : [parsed];
       return NextResponse.json({ tips, searchedAt: new Date().toISOString() });
@@ -142,7 +141,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const text = await callAnthropic(
+    const text = await callGemini(
       buildMatchPrompt(homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll),
       key
     );

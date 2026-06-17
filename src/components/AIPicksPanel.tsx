@@ -198,7 +198,7 @@ export default function AIPicksPanel() {
   const [bankroll, setBankroll] = useState<number | "">(200);
 
   useEffect(() => {
-    const key = localStorage.getItem("wc26-anthropic-key");
+    const key = localStorage.getItem("wc26-gemini-key");
     if (key) setApiKey(key);
     const bl = localStorage.getItem("wc26-bankroll");
     if (bl) setBankroll(parseFloat(bl) || 200);
@@ -269,13 +269,13 @@ export default function AIPicksPanel() {
             <Sparkles className="h-4 w-4 text-amber-400" />
             <h2 className="text-sm font-bold text-amber-400">AI Betting Analysis</h2>
           </div>
-          <p className="text-xs text-white/40 mt-0.5">Searches the web for live stats, odds from Gamdom/Rollbit, and recommends bets with stake sizing</p>
+          <p className="text-xs text-white/40 mt-0.5">AI analysis of WC2026 fixtures — probability breakdowns, Gamdom/Rollbit odds, Kelly Criterion stake sizing</p>
         </div>
 
         <div className="px-5 py-4 space-y-4">
           {!apiKey && (
             <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 flex items-center justify-between">
-              <p className="text-xs text-amber-400">Add your Anthropic API key in Settings to enable AI analysis</p>
+              <p className="text-xs text-amber-400">Add your free Gemini API key in Settings to enable AI analysis</p>
               <a href="/settings" className="text-xs font-semibold text-amber-400 hover:text-amber-300 ml-3 whitespace-nowrap">Settings →</a>
             </div>
           )}
