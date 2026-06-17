@@ -9,13 +9,13 @@ export default function SettingsPage() {
   const [saved, setSaved]       = useState(false);
 
   useEffect(() => {
-    setApiKey(localStorage.getItem("wc26-gemini-key") ?? "");
+    setApiKey(localStorage.getItem("wc26-groq-key") ?? "");
     setBankroll(localStorage.getItem("wc26-bankroll") ?? "200");
   }, []);
 
   function handleSave() {
-    if (apiKey) localStorage.setItem("wc26-gemini-key", apiKey);
-    else localStorage.removeItem("wc26-gemini-key");
+    if (apiKey) localStorage.setItem("wc26-groq-key", apiKey);
+    else localStorage.removeItem("wc26-groq-key");
     localStorage.setItem("wc26-bankroll", bankroll);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -23,11 +23,11 @@ export default function SettingsPage() {
 
   function handleClearKey() {
     setApiKey("");
-    localStorage.removeItem("wc26-gemini-key");
+    localStorage.removeItem("wc26-groq-key");
   }
 
   const maskedKey = apiKey.length > 10
-    ? `${apiKey.slice(0, 16)}${"•".repeat(12)}${apiKey.slice(-4)}`
+    ? `${apiKey.slice(0, 10)}${"•".repeat(12)}${apiKey.slice(-4)}`
     : apiKey;
 
   return (
@@ -40,27 +40,27 @@ export default function SettingsPage() {
       <div className="rounded-2xl border border-white/8 overflow-hidden">
         <div className="flex items-center gap-3 px-5 py-4 bg-white/3 border-b border-white/8">
           <Key className="h-4 w-4 text-amber-400" />
-          <h2 className="text-sm font-semibold text-white">Google Gemini API Key</h2>
+          <h2 className="text-sm font-semibold text-white">Groq API Key</h2>
           <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">FREE</span>
         </div>
         <div className="px-5 py-5 space-y-4">
           <p className="text-xs text-white/40 leading-relaxed">
-            Required for AI betting analysis. Completely free — 1,500 requests/day.{" "}
+            Required for AI betting analysis. Completely free — 14,400 requests/day with Llama 3.3 70B.{" "}
             Get your key at{" "}
-            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
+            <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer"
               className="text-amber-400 hover:text-amber-300 inline-flex items-center gap-0.5">
-              aistudio.google.com <ExternalLink className="h-2.5 w-2.5" />
+              console.groq.com <ExternalLink className="h-2.5 w-2.5" />
             </a>
             {" "}— stored in your browser only.
           </p>
 
           <div>
-            <label className="text-xs font-medium text-white/50 block mb-1.5">Gemini API Key</label>
+            <label className="text-xs font-medium text-white/50 block mb-1.5">Groq API Key</label>
             <input
               type="password"
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
-              placeholder="AIza..."
+              placeholder="gsk_..."
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 font-mono focus:outline-none focus:border-amber-500/50"
             />
             {apiKey && (

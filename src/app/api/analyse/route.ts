@@ -83,33 +83,34 @@ Return ONLY a valid JSON array, no markdown, no extra text:
 Give 3 real World Cup 2026 fixtures with genuine analysis and value reasoning.`;
 }
 
-async function callGemini(prompt: string, apiKey: string): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-  const response = await fetch(url, {
+async function callGroq(prompt: string, apiKey: string): Promise<string> {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
+      model: "llama-3.3-70b-versatile",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 2048,
+      temperature: 0.7,
     }),
   });
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`Gemini API ${response.status}: ${errText}`);
+    throw new Error(`Groq API ${response.status}: ${errText}`);
   }
 
   const data = (await response.json()) as {
-    candidates?: Array<{
-      content?: { parts?: Array<{ text?: string }> };
-    }>;
+    choices?: Array<{ message?: { content?: string } }>;
   };
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  return data.choices?.[0]?.message?.content ?? "";
 }
 
 function extractJson(text: string): unknown {
   const trimmed = text.trim();
-  // Strip markdown code fences if present
   const stripped = trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
   const match = stripped.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
   if (!match) throw new Error(`No JSON in response: ${trimmed.slice(0, 300)}`);
@@ -122,13 +123,13 @@ export async function POST(req: NextRequest) {
     const { mode, homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll, apiKey } =
       body;
 
-    const key = apiKey || process.env.GEMINI_API_KEY;
+    const key = apiKey || process.env.GROQ_API_KEY;
     if (!key) {
-      return NextResponse.json({ error: "No API key. Add your free Gemini key in Settings." }, { status: 503 });
+      return NextResponse.json({ error: "No API key. Add your free Groq key in Settings." }, { status: 503 });
     }
 
     if (mode === "recommendations") {
-      const text = await callGemini(buildRecommendationsPrompt(), key);
+      const text = await callGroq(buildRecommendationsPrompt(), key);
       const parsed = extractJson(text);
       const tips = Array.isArray(parsed) ? parsed : [parsed];
       return NextResponse.json({ tips, searchedAt: new Date().toISOString() });
@@ -141,7 +142,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const text = await callGemini(
+    const text = await callGroq(
       buildMatchPrompt(homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll),
       key
     );
