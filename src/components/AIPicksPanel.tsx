@@ -3,13 +3,14 @@
 import { useState, useEffect } from "react";
 import {
   Sparkles, Search, TrendingUp, TrendingDown, AlertTriangle, CheckCircle,
-  XCircle, Loader2, ChevronDown, ChevronUp, Plus, Layers, ChevronLeft, ChevronRight,
+  XCircle, Loader2, ChevronDown, ChevronUp, Plus, Layers, ChevronLeft,
+  ChevronRight, Calendar,
 } from "lucide-react";
 import type { AnalysisResult, AccaResult } from "@/app/api/analyse/route";
+import { getFixturesForDate, isPlayed, type Fixture } from "@/data/fixtures";
 import { useApp } from "@/context/AppContext";
 import AddTipModal from "./AddTipModal";
 
-// WC 2026: June 11 – July 19
 const WC_START = "2026-06-11";
 const WC_END   = "2026-07-19";
 
@@ -18,14 +19,12 @@ function clampDate(iso: string) {
   if (iso > WC_END)   return WC_END;
   return iso;
 }
-
 function addDays(iso: string, n: number) {
   const d = new Date(iso);
   d.setDate(d.getDate() + n);
   return clampDate(d.toISOString().slice(0, 10));
 }
-
-function fmtDateDisplay(iso: string) {
+function fmtShort(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 }
 
@@ -44,26 +43,82 @@ const CONF_STYLES = {
 
 /* ── Date Navigator ── */
 function DateNav({ date, onChange }: { date: string; onChange: (d: string) => void }) {
-  const isToday = date === new Date().toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+  const fixtures = getFixturesForDate(date);
+  const upcoming = fixtures.filter((f) => !isPlayed(f));
+
   return (
-    <div className="flex items-center gap-2">
-      <button onClick={() => onChange(addDays(date, -1))} disabled={date <= WC_START}
-        className="p-1.5 rounded-lg bg-white/5 border border-white/8 text-white/40 hover:text-white/80 disabled:opacity-20 transition-colors">
-        <ChevronLeft className="h-3.5 w-3.5" />
-      </button>
-      <div className="flex items-center gap-2 bg-white/5 border border-white/8 rounded-lg px-3 py-1.5">
-        <span className="text-sm font-medium text-white">{fmtDateDisplay(date)}</span>
-        {isToday && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400">Today</span>}
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <button onClick={() => onChange(addDays(date, -1))} disabled={date <= WC_START}
+          className="p-1.5 rounded-lg bg-white/5 border border-white/8 text-white/40 hover:text-white/80 disabled:opacity-20 transition-colors">
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </button>
+        <div className="flex items-center gap-2 bg-white/5 border border-white/8 rounded-lg px-3 py-1.5 flex-1 justify-center">
+          <Calendar className="h-3.5 w-3.5 text-white/30" />
+          <span className="text-sm font-semibold text-white">{fmtShort(date)}</span>
+          {date === today && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400">Today</span>
+          )}
+          {fixtures.length > 0 && (
+            <span className="text-[10px] text-white/30 ml-1">
+              {upcoming.length > 0 ? `${upcoming.length} upcoming` : `${fixtures.length} played`}
+            </span>
+          )}
+        </div>
+        <button onClick={() => onChange(addDays(date, 1))} disabled={date >= WC_END}
+          className="p-1.5 rounded-lg bg-white/5 border border-white/8 text-white/40 hover:text-white/80 disabled:opacity-20 transition-colors">
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
       </div>
-      <button onClick={() => onChange(addDays(date, 1))} disabled={date >= WC_END}
-        className="p-1.5 rounded-lg bg-white/5 border border-white/8 text-white/40 hover:text-white/80 disabled:opacity-20 transition-colors">
-        <ChevronRight className="h-3.5 w-3.5" />
-      </button>
+
+      {/* Fixture list for this day */}
+      {fixtures.length === 0 ? (
+        <p className="text-xs text-white/25 text-center py-2">No group stage matches on this date</p>
+      ) : (
+        <div className="space-y-1.5">
+          {fixtures.map((f, i) => (
+            <FixtureRow key={i} fixture={f} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-/* ── Single Match Analysis Card ── */
+/* ── Fixture row shown in date nav ── */
+function FixtureRow({ fixture }: { fixture: Fixture }) {
+  const played = isPlayed(fixture);
+  return (
+    <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm ${
+      played
+        ? "bg-white/2 border-white/5 opacity-60"
+        : "bg-white/4 border-white/8"
+    }`}>
+      <span className="text-[10px] font-medium text-white/30 w-16 flex-shrink-0">{fixture.group}</span>
+      <div className="flex-1 flex items-center justify-between gap-2 min-w-0">
+        <span className={`font-medium truncate ${played ? "text-white/40" : "text-white"}`}>
+          {fixture.homeTeam}
+        </span>
+        {played ? (
+          <span className="text-xs font-bold text-white/50 flex-shrink-0">
+            {fixture.homeScore} – {fixture.awayScore}
+          </span>
+        ) : (
+          <span className="text-[10px] text-white/20 flex-shrink-0">vs</span>
+        )}
+        <span className={`font-medium truncate text-right ${played ? "text-white/40" : "text-white"}`}>
+          {fixture.awayTeam}
+        </span>
+      </div>
+      {played && (
+        <span className="text-[10px] text-white/20 flex-shrink-0">FT</span>
+      )}
+    </div>
+  );
+}
+
+/* ── Single match analysis card ── */
 function AnalysisCard({ analysis, bankroll }: { analysis: AnalysisResult; bankroll: number }) {
   const [expanded, setExpanded] = useState(false);
   const [showTipModal, setShowTipModal] = useState(false);
@@ -97,7 +152,6 @@ function AnalysisCard({ analysis, bankroll }: { analysis: AnalysisResult; bankro
           }}
         />
       )}
-
       <div className="rounded-2xl border border-white/8 bg-white/3 overflow-hidden">
         <div className="px-5 py-4">
           <div className="flex items-start justify-between gap-4">
@@ -105,12 +159,11 @@ function AnalysisCard({ analysis, bankroll }: { analysis: AnalysisResult; bankro
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-base font-bold text-white">{analysis.match}</h3>
                 <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${CONF_STYLES[analysis.recommendedBet.confidence]}`}>
-                  {analysis.recommendedBet.confidence} confidence
+                  {analysis.recommendedBet.confidence}
                 </span>
               </div>
               <p className="text-xs text-white/40 mt-0.5">
-                {fmtDateDisplay(analysis.date)}
-                {analysis.oddsFound && ` · ${analysis.oddsFound.source}`}
+                {fmtShort(analysis.date)}{analysis.oddsFound && ` · ${analysis.oddsFound.source}`}
               </p>
             </div>
             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full flex-shrink-0 ${stake.bg}`}>
@@ -188,16 +241,15 @@ function AnalysisCard({ analysis, bankroll }: { analysis: AnalysisResult; bankro
             </div>
           </div>
         </div>
-
         {expanded && (
           <div className="border-t border-white/6 px-5 py-4 space-y-4">
             {analysis.keyStats.length > 0 && (
               <div>
                 <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">Key Stats</p>
                 <ul className="space-y-1.5">
-                  {analysis.keyStats.map((stat, i) => (
+                  {analysis.keyStats.map((s, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-white/60">
-                      <CheckCircle className="h-3.5 w-3.5 text-green-400/60 mt-0.5 flex-shrink-0" />{stat}
+                      <CheckCircle className="h-3.5 w-3.5 text-green-400/60 mt-0.5 flex-shrink-0" />{s}
                     </li>
                   ))}
                 </ul>
@@ -207,9 +259,9 @@ function AnalysisCard({ analysis, bankroll }: { analysis: AnalysisResult; bankro
               <div>
                 <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">Risks</p>
                 <ul className="space-y-1.5">
-                  {analysis.risksToConsider.map((risk, i) => (
+                  {analysis.risksToConsider.map((r, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-white/60">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-400/60 mt-0.5 flex-shrink-0" />{risk}
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-400/60 mt-0.5 flex-shrink-0" />{r}
                     </li>
                   ))}
                 </ul>
@@ -222,7 +274,7 @@ function AnalysisCard({ analysis, bankroll }: { analysis: AnalysisResult; bankro
   );
 }
 
-/* ── Acca Card ── */
+/* ── Acca card ── */
 function AccaCard({ acca, bankroll }: { acca: AccaResult; bankroll: number }) {
   const [expanded, setExpanded] = useState(true);
   const stake = STAKE_STYLES[acca.stakeRating];
@@ -237,7 +289,7 @@ function AccaCard({ acca, bankroll }: { acca: AccaResult; bankroll: number }) {
       <div className="px-5 py-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
               <Layers className="h-4 w-4 text-purple-400" />
               <h3 className="text-base font-bold text-white">{acca.title}</h3>
             </div>
@@ -245,7 +297,7 @@ function AccaCard({ acca, bankroll }: { acca: AccaResult; bankroll: number }) {
           </div>
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
             <div className="bg-purple-500/20 border border-purple-500/30 rounded-xl px-3 py-2 text-center">
-              <p className="text-[10px] text-purple-300/60 uppercase tracking-wider">Combined</p>
+              <p className="text-[10px] text-purple-300/60 uppercase tracking-wider">Odds</p>
               <p className="text-xl font-black text-purple-300">{acca.totalOdds.toFixed(2)}</p>
             </div>
             <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full ${stake.bg}`}>
@@ -255,7 +307,6 @@ function AccaCard({ acca, bankroll }: { acca: AccaResult; bankroll: number }) {
           </div>
         </div>
 
-        {/* Stats row */}
         <div className="mt-4 flex gap-4 text-xs flex-wrap">
           <span>
             <span className="text-white/30">EV: </span>
@@ -290,18 +341,18 @@ function AccaCard({ acca, bankroll }: { acca: AccaResult; bankroll: number }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-bold text-white/20 w-4">{i + 1}</span>
+                    <span className="text-xs font-bold text-white/20">{i + 1}</span>
                     <span className="text-sm font-semibold text-white">{leg.match}</span>
                     <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${CONF_STYLES[leg.confidence]}`}>
                       {leg.confidence}
                     </span>
                   </div>
-                  <p className="text-xs text-white/40 mt-0.5 ml-6">{fmtDateDisplay(leg.date)} · {leg.market}</p>
-                  <p className="text-xs text-white/50 mt-1 ml-6 leading-relaxed">{leg.reasoning}</p>
+                  <p className="text-xs text-white/40 mt-0.5 ml-4">{fmtShort(leg.date)} · {leg.market}</p>
+                  <p className="text-xs text-white/50 mt-1 ml-4 leading-relaxed">{leg.reasoning}</p>
                 </div>
                 <div className="flex-shrink-0 text-right">
                   <p className="text-sm font-bold text-amber-400">{leg.prediction}</p>
-                  <p className="text-sm font-bold text-white/70 mt-0.5">@ {leg.odds}</p>
+                  <p className="text-sm font-bold text-white/60">@ {leg.odds}</p>
                 </div>
               </div>
             </div>
@@ -317,24 +368,24 @@ type Mode = "recommendations" | "acca" | "specific";
 
 export default function AIPicksPanel() {
   const { tips } = useApp();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = clampDate(new Date().toISOString().slice(0, 10));
 
-  const [mode, setMode]         = useState<Mode>("recommendations");
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState("");
-  const [results, setResults]   = useState<AnalysisResult[]>([]);
-  const [acca, setAcca]         = useState<AccaResult | null>(null);
-  const [apiKey, setApiKey]     = useState("");
-  const [bankroll, setBankroll] = useState<number | "">(200);
-  const [pickedDate, setPickedDate] = useState(clampDate(today));
+  const [mode, setMode]           = useState<Mode>("recommendations");
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState("");
+  const [results, setResults]     = useState<AnalysisResult[]>([]);
+  const [acca, setAcca]           = useState<AccaResult | null>(null);
+  const [apiKey, setApiKey]       = useState("");
+  const [bankroll, setBankroll]   = useState<number | "">(200);
+  const [pickedDate, setPickedDate] = useState(today);
 
   // Specific match form
-  const [homeTeam, setHomeTeam] = useState("");
-  const [awayTeam, setAwayTeam] = useState("");
+  const [homeTeam, setHomeTeam]   = useState("");
+  const [awayTeam, setAwayTeam]   = useState("");
   const [matchDate, setMatchDate] = useState(today);
-  const [homeOdds, setHomeOdds] = useState<number | "">("");
-  const [drawOdds, setDrawOdds] = useState<number | "">("");
-  const [awayOdds, setAwayOdds] = useState<number | "">("");
+  const [homeOdds, setHomeOdds]   = useState<number | "">("");
+  const [drawOdds, setDrawOdds]   = useState<number | "">("");
+  const [awayOdds, setAwayOdds]   = useState<number | "">("");
 
   void tips;
 
@@ -352,6 +403,16 @@ export default function AIPicksPanel() {
     setError("");
   }
 
+  function fillFromFixture(f: Fixture) {
+    setHomeTeam(f.homeTeam);
+    setAwayTeam(f.awayTeam);
+    setMatchDate(f.date);
+    setHomeOdds("");
+    setDrawOdds("");
+    setAwayOdds("");
+    switchMode("specific");
+  }
+
   async function runAnalysis() {
     if (!apiKey) { window.location.href = "/settings"; return; }
     setLoading(true);
@@ -360,13 +421,13 @@ export default function AIPicksPanel() {
     setAcca(null);
 
     try {
-      let body: Record<string, unknown>;
+      let bodyData: Record<string, unknown>;
       if (mode === "recommendations") {
-        body = { mode: "recommendations", date: pickedDate, bankroll: bankroll || undefined, apiKey };
+        bodyData = { mode: "recommendations", date: pickedDate, bankroll: bankroll || undefined, apiKey };
       } else if (mode === "acca") {
-        body = { mode: "acca", date: pickedDate, bankroll: bankroll || undefined, apiKey };
+        bodyData = { mode: "acca", date: pickedDate, bankroll: bankroll || undefined, apiKey };
       } else {
-        body = {
+        bodyData = {
           mode: "specific", homeTeam, awayTeam, date: matchDate,
           homeOdds: homeOdds || undefined, drawOdds: drawOdds || undefined,
           awayOdds: awayOdds || undefined, bankroll: bankroll || undefined, apiKey,
@@ -376,19 +437,15 @@ export default function AIPicksPanel() {
       const res = await fetch("/api/analyse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(bodyData),
       });
 
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Analysis failed"); return; }
 
-      if (mode === "recommendations") {
-        setResults(data.tips ?? []);
-      } else if (mode === "acca") {
-        setAcca(data as AccaResult);
-      } else {
-        setResults([data]);
-      }
+      if (mode === "recommendations") setResults(data.tips ?? []);
+      else if (mode === "acca") setAcca(data as AccaResult);
+      else setResults([data]);
     } catch {
       setError("Network error — check your connection");
     } finally {
@@ -396,16 +453,15 @@ export default function AIPicksPanel() {
     }
   }
 
-  const btnLabel = mode === "recommendations"
-    ? "Get Best Bets"
-    : mode === "acca"
-    ? "Build AI Acca"
+  const upcomingOnDay = getFixturesForDate(pickedDate).filter((f) => !isPlayed(f));
+  const hasUpcoming   = upcomingOnDay.length > 0;
+
+  const btnLabel = mode === "recommendations" ? "Get Best Bets"
+    : mode === "acca" ? "Build AI Acca"
     : "Analyse Match";
 
-  const loadingLabel = mode === "recommendations"
-    ? "Finding best bets…"
-    : mode === "acca"
-    ? "Building acca…"
+  const loadingLabel = mode === "recommendations" ? "Finding best bets…"
+    : mode === "acca" ? "Building acca…"
     : "Analysing match…";
 
   return (
@@ -417,7 +473,7 @@ export default function AIPicksPanel() {
             <h2 className="text-sm font-bold text-amber-400">AI Betting Analysis</h2>
           </div>
           <p className="text-xs text-white/40 mt-0.5">
-            Probability breakdowns · Gamdom/Rollbit odds · Kelly Criterion stake sizing
+            Real WC2026 fixtures · Probability breakdowns · Kelly Criterion stake sizing
           </p>
         </div>
 
@@ -445,68 +501,98 @@ export default function AIPicksPanel() {
                 <Sparkles className="h-3 w-3" /> Analyse Match
               </button>
             </div>
-
-            <div className="flex items-center gap-2 ml-auto">
-              <label className="text-xs text-white/40">£</label>
+            <div className="flex items-center gap-1.5 ml-auto">
+              <span className="text-xs text-white/30">£</span>
               <input type="number" value={bankroll} onChange={e => setBankroll(parseFloat(e.target.value) || "")}
                 className="w-20 bg-white/5 border border-white/10 rounded-lg py-1.5 px-2 text-sm text-white focus:outline-none" placeholder="200" />
             </div>
           </div>
 
-          {/* Date navigator (recommendations + acca) */}
+          {/* Date navigator with fixture list */}
           {(mode === "recommendations" || mode === "acca") && (
-            <div className="flex items-center gap-3 flex-wrap">
-              <DateNav date={pickedDate} onChange={(d) => { setPickedDate(d); setResults([]); setAcca(null); }} />
-              <span className="text-xs text-white/25">Browse WC2026 day by day</span>
-            </div>
+            <DateNav
+              date={pickedDate}
+              onChange={(d) => { setPickedDate(d); setResults([]); setAcca(null); setError(""); }}
+            />
           )}
 
           {/* Specific match form */}
           {mode === "specific" && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <input value={homeTeam} onChange={e => setHomeTeam(e.target.value)} placeholder="Home team *"
-                className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-amber-500/40" />
-              <input value={awayTeam} onChange={e => setAwayTeam(e.target.value)} placeholder="Away team *"
-                className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-amber-500/40" />
-              <input type="date" value={matchDate} onChange={e => setMatchDate(e.target.value)}
-                className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/40" />
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-white/30 flex-shrink-0">Home</span>
-                <input type="number" value={homeOdds} onChange={e => setHomeOdds(parseFloat(e.target.value) || "")} step="0.01" placeholder="2.10"
-                  className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/40" />
+            <div className="space-y-3">
+              {/* Quick pick from fixture list */}
+              <div>
+                <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">Quick pick a fixture</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <button onClick={() => setMatchDate(addDays(matchDate, -1))} disabled={matchDate <= WC_START}
+                    className="p-1 rounded bg-white/5 text-white/40 hover:text-white/80 disabled:opacity-20">
+                    <ChevronLeft className="h-3 w-3" />
+                  </button>
+                  <span className="text-xs text-white/50">{fmtShort(matchDate)}</span>
+                  <button onClick={() => setMatchDate(addDays(matchDate, 1))} disabled={matchDate >= WC_END}
+                    className="p-1 rounded bg-white/5 text-white/40 hover:text-white/80 disabled:opacity-20">
+                    <ChevronRight className="h-3 w-3" />
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  {getFixturesForDate(matchDate).map((f, i) => (
+                    <button key={i} onClick={() => fillFromFixture(f)}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-white/4 border border-white/8 hover:bg-white/8 transition-colors text-left">
+                      <span className="text-[10px] text-white/30 w-14 flex-shrink-0">{f.group}</span>
+                      <span className="text-sm text-white flex-1">{f.homeTeam} vs {f.awayTeam}</span>
+                      {isPlayed(f) && <span className="text-xs text-white/30">{f.homeScore}–{f.awayScore}</span>}
+                    </button>
+                  ))}
+                  {getFixturesForDate(matchDate).length === 0 && (
+                    <p className="text-xs text-white/20 text-center py-2">No fixtures on this date</p>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-white/30 flex-shrink-0">Draw</span>
-                <input type="number" value={drawOdds} onChange={e => setDrawOdds(parseFloat(e.target.value) || "")} step="0.01" placeholder="3.40"
-                  className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/40" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-white/30 flex-shrink-0">Away</span>
-                <input type="number" value={awayOdds} onChange={e => setAwayOdds(parseFloat(e.target.value) || "")} step="0.01" placeholder="3.20"
-                  className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/40" />
+
+              <div className="border-t border-white/6 pt-3">
+                <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">Or enter manually</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <input value={homeTeam} onChange={e => setHomeTeam(e.target.value)} placeholder="Home team *"
+                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-amber-500/40" />
+                  <input value={awayTeam} onChange={e => setAwayTeam(e.target.value)} placeholder="Away team *"
+                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-amber-500/40" />
+                  <input type="date" value={matchDate} onChange={e => setMatchDate(e.target.value)}
+                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/40" />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-white/30 flex-shrink-0">Home</span>
+                    <input type="number" value={homeOdds} onChange={e => setHomeOdds(parseFloat(e.target.value) || "")} step="0.01" placeholder="2.10"
+                      className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/40" />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-white/30 flex-shrink-0">Draw</span>
+                    <input type="number" value={drawOdds} onChange={e => setDrawOdds(parseFloat(e.target.value) || "")} step="0.01" placeholder="3.40"
+                      className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/40" />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-white/30 flex-shrink-0">Away</span>
+                    <input type="number" value={awayOdds} onChange={e => setAwayOdds(parseFloat(e.target.value) || "")} step="0.01" placeholder="3.20"
+                      className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/40" />
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
           <button onClick={runAnalysis}
-            disabled={loading || (mode === "specific" && (!homeTeam || !awayTeam))}
+            disabled={loading || (mode === "specific" && (!homeTeam || !awayTeam)) || ((mode === "recommendations" || mode === "acca") && !hasUpcoming)}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl disabled:opacity-40 text-sm font-bold transition-all ${
-              mode === "acca"
-                ? "bg-purple-500 hover:bg-purple-400 text-white"
-                : "bg-amber-500 hover:bg-amber-400 text-black"
+              mode === "acca" ? "bg-purple-500 hover:bg-purple-400 text-white" : "bg-amber-500 hover:bg-amber-400 text-black"
             }`}>
-            {loading ? (
-              <><Loader2 className="h-4 w-4 animate-spin" />{loadingLabel}</>
-            ) : (
-              <>{mode === "acca" ? <Layers className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}{btnLabel}</>
-            )}
+            {loading
+              ? <><Loader2 className="h-4 w-4 animate-spin" />{loadingLabel}</>
+              : <>{mode === "acca" ? <Layers className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}{btnLabel}</>
+            }
           </button>
 
-          {loading && (
-            <p className="text-xs text-white/30 animate-pulse">
-              Analysing form, head-to-head, squad quality, market odds…
-            </p>
+          {(mode === "recommendations" || mode === "acca") && !hasUpcoming && getFixturesForDate(pickedDate).length > 0 && (
+            <p className="text-xs text-white/30">All matches on this date have already been played.</p>
           )}
+
+          {loading && <p className="text-xs text-white/30 animate-pulse">Analysing form, head-to-head, squad quality, market odds…</p>}
 
           {error && (
             <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3">
@@ -519,14 +605,12 @@ export default function AIPicksPanel() {
         </div>
       </div>
 
-      {/* Acca result */}
       {acca && <AccaCard acca={acca} bankroll={Number(bankroll) || 0} />}
 
-      {/* Single match results */}
       {results.length > 0 && (
         <div className="space-y-4">
           <p className="text-xs font-medium text-white/30 uppercase tracking-wider">
-            {results.length} AI {results.length === 1 ? "Pick" : "Picks"} · {fmtDateDisplay(pickedDate)}
+            {results.length} AI {results.length === 1 ? "Pick" : "Picks"} · {fmtShort(mode === "specific" ? matchDate : pickedDate)}
           </p>
           {results.map((analysis, i) => (
             <AnalysisCard key={i} analysis={analysis} bankroll={Number(bankroll) || 0} />
