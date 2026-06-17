@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sparkles, Search, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, XCircle, Loader2, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import type { AnalysisResult } from "@/app/api/analyse/route";
 import { useApp } from "@/context/AppContext";
@@ -194,6 +194,19 @@ export default function AIPicksPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState<AnalysisResult[]>([]);
+  const [apiKey, setApiKey] = useState("");
+  const [showKeyInput, setShowKeyInput] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("wc26-anthropic-key");
+    if (saved) setApiKey(saved);
+    else setShowKeyInput(true);
+  }, []);
+
+  function saveKey() {
+    localStorage.setItem("wc26-anthropic-key", apiKey);
+    setShowKeyInput(false);
+  }
 
   // Specific match form
   const [homeTeam, setHomeTeam] = useState("");
@@ -204,9 +217,10 @@ export default function AIPicksPanel() {
   const [awayOdds, setAwayOdds] = useState<number | "">("");
   const [bankroll, setBankroll] = useState<number | "">(200);
 
-  void tips; // suppress unused warning
+  void tips;
 
   async function runAnalysis() {
+    if (!apiKey) { setShowKeyInput(true); return; }
     setLoading(true);
     setError("");
     setResults([]);
@@ -214,7 +228,7 @@ export default function AIPicksPanel() {
     try {
       const body =
         mode === "recommendations"
-          ? { mode: "recommendations", bankroll: bankroll || undefined }
+          ? { mode: "recommendations", bankroll: bankroll || undefined, apiKey }
           : {
               mode: "specific",
               homeTeam,
@@ -224,6 +238,7 @@ export default function AIPicksPanel() {
               drawOdds: drawOdds || undefined,
               awayOdds: awayOdds || undefined,
               bankroll: bankroll || undefined,
+              apiKey,
             };
 
       const res = await fetch("/api/analyse", {
@@ -263,6 +278,31 @@ export default function AIPicksPanel() {
         </div>
 
         <div className="px-5 py-4 space-y-4">
+          {/* API key input */}
+          {showKeyInput ? (
+            <div className="bg-white/3 border border-amber-500/20 rounded-xl p-4 space-y-3">
+              <p className="text-xs text-white/50">Enter your Anthropic API key — saved to your browser only, never sent anywhere except the AI request.</p>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={e => setApiKey(e.target.value)}
+                  placeholder="sk-ant-api03-..."
+                  className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/50 font-mono"
+                />
+                <button onClick={saveKey} disabled={!apiKey}
+                  className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black text-xs font-bold transition-colors">
+                  Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-white/30">API key saved ✓</span>
+              <button onClick={() => setShowKeyInput(true)} className="text-xs text-white/20 hover:text-white/50 transition-colors">Change key</button>
+            </div>
+          )}
+
           {/* Mode + bankroll */}
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex gap-1 bg-white/5 border border-white/8 rounded-xl p-1">
@@ -336,11 +376,10 @@ export default function AIPicksPanel() {
           {error && (
             <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3">
               <p className="text-sm text-red-400">{error}</p>
-              {error.includes("ANTHROPIC_API_KEY") && (
-                <p className="text-xs text-red-400/60 mt-1">
-                  Add ANTHROPIC_API_KEY to your Vercel project → Settings → Environment Variables.
-                  Get your key at console.anthropic.com
-                </p>
+              {error.includes("key") && (
+                <button onClick={() => setShowKeyInput(true)} className="text-xs text-amber-400 mt-1 hover:underline">
+                  Update API key →
+                </button>
               )}
             </div>
           )}

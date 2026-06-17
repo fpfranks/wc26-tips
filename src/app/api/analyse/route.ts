@@ -1,8 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
 export interface AnalysisResult {
   match: string;
   homeTeam: string;
@@ -148,7 +146,8 @@ For each match return analysis in this EXACT JSON format. Respond with ONLY a JS
 Find 3 genuinely good value picks. Mark stakeRating "Skip" if odds are poor value. Include real odds you find.`;
 }
 
-async function runAgentLoop(prompt: string): Promise<string> {
+async function runAgentLoop(prompt: string, apiKey: string): Promise<string> {
+  const client = new Anthropic({ apiKey });
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
   let finalText = "";
 
@@ -195,19 +194,17 @@ function extractJson(text: string): unknown {
 }
 
 export async function POST(req: NextRequest) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY not configured. Add it to your Vercel environment variables." },
-      { status: 503 }
-    );
-  }
-
   try {
     const body = await req.json();
-    const { mode, homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll } = body;
+    const { mode, homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll, apiKey } = body;
+
+    const key = apiKey || process.env.ANTHROPIC_API_KEY;
+    if (!key) {
+      return NextResponse.json({ error: "No API key provided." }, { status: 503 });
+    }
 
     if (mode === "recommendations") {
-      const text = await runAgentLoop(buildRecommendationsPrompt());
+      const text = await runAgentLoop(buildRecommendationsPrompt(), key);
       const tips = extractJson(text) as AnalysisResult[];
       return NextResponse.json({ tips, searchedAt: new Date().toISOString() });
     }
@@ -217,7 +214,8 @@ export async function POST(req: NextRequest) {
     }
 
     const text = await runAgentLoop(
-      buildMatchPrompt(homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll)
+      buildMatchPrompt(homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll),
+      key
     );
     const analysis = extractJson(text) as AnalysisResult;
     return NextResponse.json(analysis);
