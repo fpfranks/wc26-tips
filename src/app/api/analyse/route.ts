@@ -144,8 +144,8 @@ Find 3 genuinely good value picks. Mark stakeRating "Skip" if odds are poor valu
 async function runAgentLoop(prompt: string, apiKey: string): Promise<string> {
   const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 4000,
+    model: "claude-3-5-sonnet-20241022",
+    max_tokens: 2000,
     messages: [{ role: "user", content: prompt }],
   });
   const textBlock = response.content.find((b) => b.type === "text");
@@ -185,8 +185,9 @@ export async function POST(req: NextRequest) {
     );
     const analysis = extractJson(text) as AnalysisResult;
     return NextResponse.json(analysis);
-  } catch (err) {
-    console.error("[analyse]", err);
-    return NextResponse.json({ error: "Analysis failed. Check server logs." }, { status: 500 });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[analyse]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
