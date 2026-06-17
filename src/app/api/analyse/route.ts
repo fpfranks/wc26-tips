@@ -1,0 +1,228 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { NextRequest, NextResponse } from "next/server";
+
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+export interface AnalysisResult {
+  match: string;
+  homeTeam: string;
+  awayTeam: string;
+  date: string;
+  summary: string;
+  homeWinProb: number;
+  drawProb: number;
+  awayWinProb: number;
+  keyStats: string[];
+  recommendedBet: {
+    market: string;
+    prediction: string;
+    reasoning: string;
+    confidence: "High" | "Medium" | "Low";
+  };
+  oddsFound: {
+    homeWin: number;
+    draw: number;
+    awayWin: number;
+    source: string;
+  } | null;
+  expectedValue: number | null;
+  kellyFraction: number | null;
+  stakeRating: "High Stake" | "Medium Stake" | "Low Stake" | "Skip";
+  stakeReasoning: string;
+  risksToConsider: string[];
+}
+
+export interface RecommendationsResult {
+  tips: AnalysisResult[];
+  searchedAt: string;
+}
+
+function buildMatchPrompt(
+  homeTeam: string,
+  awayTeam: string,
+  date: string,
+  homeOdds?: number,
+  drawOdds?: number,
+  awayOdds?: number,
+  bankroll?: number
+) {
+  const oddsCtx =
+    homeOdds || drawOdds || awayOdds
+      ? `User's current odds from Gamdom/Rollbit — Home: ${homeOdds ?? "?"}, Draw: ${drawOdds ?? "?"}, Away: ${awayOdds ?? "?"}`
+      : "No odds provided yet — search for typical market odds on this game.";
+
+  return `You are an elite football betting analyst. Analyse this World Cup 2026 match:
+
+${homeTeam} vs ${awayTeam} on ${date}
+
+${oddsCtx}
+${bankroll ? `User bankroll: £${bankroll}` : ""}
+
+Search the web for:
+- Current form of both teams (last 5 matches in this tournament and recent internationals)
+- Head-to-head record
+- Key injuries or suspensions
+- Market odds from crypto sportsbooks (Gamdom, Rollbit) or mainstream bookmakers
+- Any tactical or squad news
+
+Then respond in EXACTLY this JSON format (no markdown, just raw JSON):
+{
+  "match": "${homeTeam} vs ${awayTeam}",
+  "homeTeam": "${homeTeam}",
+  "awayTeam": "${awayTeam}",
+  "date": "${date}",
+  "summary": "2-3 sentence expert match preview",
+  "homeWinProb": 45,
+  "drawProb": 25,
+  "awayWinProb": 30,
+  "keyStats": [
+    "Stat about home team form",
+    "Stat about away team form",
+    "Head-to-head fact",
+    "Tournament context fact"
+  ],
+  "recommendedBet": {
+    "market": "Match Result",
+    "prediction": "Home Win",
+    "reasoning": "Detailed reasoning for this pick",
+    "confidence": "High"
+  },
+  "oddsFound": {
+    "homeWin": 2.10,
+    "draw": 3.40,
+    "awayWin": 3.20,
+    "source": "Rollbit / market average"
+  },
+  "expectedValue": 0.05,
+  "kellyFraction": 0.08,
+  "stakeRating": "High Stake",
+  "stakeReasoning": "Why to stake high/medium/low/skip",
+  "risksToConsider": [
+    "Risk factor 1",
+    "Risk factor 2"
+  ]
+}
+
+Kelly Criterion: k = (p × (b) − (1−p)) / b where b = decimal_odds − 1. Use the odds for the recommended bet.
+EV: (p × profit) − (1−p × stake). Express as fraction of stake.
+stakeRating: "High Stake" if kelly > 0.08 AND confidence High, "Medium Stake" if kelly 0.04-0.08, "Low Stake" if kelly 0.01-0.04, "Skip" if kelly ≤ 0.`;
+}
+
+function buildRecommendationsPrompt() {
+  return `You are an elite football betting analyst. Today is ${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}.
+
+Search the web for the best upcoming World Cup 2026 matches in the next 48 hours. Find the top 3 value bets, looking at odds on Gamdom, Rollbit, or mainstream bookmakers.
+
+For each match return analysis in this EXACT JSON format. Respond with ONLY a JSON array, no markdown:
+[
+  {
+    "match": "Team A vs Team B",
+    "homeTeam": "Team A",
+    "awayTeam": "Team B",
+    "date": "YYYY-MM-DD",
+    "summary": "2-3 sentence expert preview",
+    "homeWinProb": 55,
+    "drawProb": 22,
+    "awayWinProb": 23,
+    "keyStats": ["stat 1", "stat 2", "stat 3", "stat 4"],
+    "recommendedBet": {
+      "market": "Match Result",
+      "prediction": "Home Win",
+      "reasoning": "Detailed reasoning",
+      "confidence": "High"
+    },
+    "oddsFound": {
+      "homeWin": 1.95,
+      "draw": 3.50,
+      "awayWin": 3.80,
+      "source": "Rollbit / Gamdom average"
+    },
+    "expectedValue": 0.07,
+    "kellyFraction": 0.10,
+    "stakeRating": "High Stake",
+    "stakeReasoning": "Strong form, good value odds",
+    "risksToConsider": ["risk 1", "risk 2"]
+  }
+]
+
+Find 3 genuinely good value picks. Mark stakeRating "Skip" if odds are poor value. Include real odds you find.`;
+}
+
+async function runAgentLoop(prompt: string): Promise<string> {
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
+  let finalText = "";
+
+  for (let i = 0; i < 8; i++) {
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 4000,
+      tools: [{ type: "web_search_20250305" as const, name: "web_search" }],
+      messages,
+    });
+
+    const textBlock = response.content.find((b) => b.type === "text");
+    if (textBlock?.type === "text") finalText = textBlock.text;
+
+    if (response.stop_reason === "end_turn") break;
+
+    if (response.stop_reason === "tool_use") {
+      messages.push({ role: "assistant", content: response.content });
+      const toolResults: Anthropic.ToolResultBlockParam[] = response.content
+        .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
+        .map((b) => ({
+          type: "tool_result" as const,
+          tool_use_id: b.id,
+          content: JSON.stringify((b as unknown as { content: unknown }).content ?? ""),
+        }));
+      if (toolResults.length) {
+        messages.push({ role: "user", content: toolResults });
+      } else {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+
+  return finalText;
+}
+
+function extractJson(text: string): unknown {
+  const trimmed = text.trim();
+  const jsonMatch = trimmed.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
+  if (!jsonMatch) throw new Error("No JSON found in response");
+  return JSON.parse(jsonMatch[0]);
+}
+
+export async function POST(req: NextRequest) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json(
+      { error: "ANTHROPIC_API_KEY not configured. Add it to your Vercel environment variables." },
+      { status: 503 }
+    );
+  }
+
+  try {
+    const body = await req.json();
+    const { mode, homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll } = body;
+
+    if (mode === "recommendations") {
+      const text = await runAgentLoop(buildRecommendationsPrompt());
+      const tips = extractJson(text) as AnalysisResult[];
+      return NextResponse.json({ tips, searchedAt: new Date().toISOString() });
+    }
+
+    if (!homeTeam || !awayTeam || !date) {
+      return NextResponse.json({ error: "homeTeam, awayTeam and date are required" }, { status: 400 });
+    }
+
+    const text = await runAgentLoop(
+      buildMatchPrompt(homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll)
+    );
+    const analysis = extractJson(text) as AnalysisResult;
+    return NextResponse.json(analysis);
+  } catch (err) {
+    console.error("[analyse]", err);
+    return NextResponse.json({ error: "Analysis failed. Check server logs." }, { status: 500 });
+  }
+}

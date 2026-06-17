@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Lightbulb, Trash2, Pencil, ChevronDown, ChevronUp } from "lucide-react";
 import { useApp, type TipResult } from "@/context/AppContext";
 import AddTipModal from "@/components/AddTipModal";
+import AIPicksPanel from "@/components/AIPicksPanel";
 
 const RESULT_STYLES: Record<TipResult, string> = {
   pending: "bg-amber-500/15 text-amber-400",
@@ -49,6 +50,14 @@ export default function TipsPage() {
             className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-sm font-semibold transition-colors">
             + Add Tip
           </button>
+        </div>
+
+        <AIPicksPanel />
+
+        <div className="flex items-center gap-3">
+          <div className="flex-1 border-t border-white/6" />
+          <span className="text-xs text-white/20 uppercase tracking-wider">Your Tips</span>
+          <div className="flex-1 border-t border-white/6" />
         </div>
 
         {/* Filter tabs */}

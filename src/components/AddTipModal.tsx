@@ -4,32 +4,49 @@ import { useState, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { useApp, type Platform, type TipResult } from "@/context/AppContext";
 
+interface Prefill {
+  homeTeam?: string;
+  awayTeam?: string;
+  date?: string;
+  market?: string;
+  prediction?: string;
+  confidence?: number;
+  homeWinProb?: number;
+  drawProb?: number;
+  awayWinProb?: number;
+  homeOdds?: number;
+  drawOdds?: number;
+  awayOdds?: number;
+  analysis?: string;
+}
+
 interface Props {
   onClose: () => void;
   editId?: string;
+  prefill?: Prefill;
 }
 
 const MARKETS = ["Match Result", "Both Teams to Score", "Over 2.5 Goals", "Under 2.5 Goals", "Over 1.5 Goals", "First Goal Scorer", "Correct Score", "Handicap", "Draw No Bet", "Other"];
 const PLATFORMS: Platform[] = ["Gamdom", "Rollbit", "Other"];
 
-export default function AddTipModal({ onClose, editId }: Props) {
+export default function AddTipModal({ onClose, editId, prefill }: Props) {
   const { tips, addTip, updateTip } = useApp();
   const editing = editId ? tips.find(t => t.id === editId) : null;
 
-  const [homeTeam, setHomeTeam]       = useState(editing?.homeTeam ?? "");
-  const [awayTeam, setAwayTeam]       = useState(editing?.awayTeam ?? "");
-  const [date, setDate]               = useState(editing?.date ?? new Date().toISOString().slice(0, 10));
-  const [market, setMarket]           = useState(editing?.market ?? "Match Result");
-  const [prediction, setPrediction]   = useState(editing?.prediction ?? "");
-  const [confidence, setConfidence]   = useState(editing?.confidence ?? 60);
-  const [homeWinProb, setHomeWinProb] = useState(editing?.homeWinProb ?? 40);
-  const [drawProb, setDrawProb]       = useState(editing?.drawProb ?? 25);
-  const [awayWinProb, setAwayWinProb] = useState(editing?.awayWinProb ?? 35);
-  const [homeOdds, setHomeOdds]       = useState(editing?.homeOdds ?? 0);
-  const [drawOdds, setDrawOdds]       = useState(editing?.drawOdds ?? 0);
-  const [awayOdds, setAwayOdds]       = useState(editing?.awayOdds ?? 0);
+  const [homeTeam, setHomeTeam]       = useState(editing?.homeTeam ?? prefill?.homeTeam ?? "");
+  const [awayTeam, setAwayTeam]       = useState(editing?.awayTeam ?? prefill?.awayTeam ?? "");
+  const [date, setDate]               = useState(editing?.date ?? prefill?.date ?? new Date().toISOString().slice(0, 10));
+  const [market, setMarket]           = useState(editing?.market ?? prefill?.market ?? "Match Result");
+  const [prediction, setPrediction]   = useState(editing?.prediction ?? prefill?.prediction ?? "");
+  const [confidence, setConfidence]   = useState(editing?.confidence ?? prefill?.confidence ?? 60);
+  const [homeWinProb, setHomeWinProb] = useState(editing?.homeWinProb ?? prefill?.homeWinProb ?? 40);
+  const [drawProb, setDrawProb]       = useState(editing?.drawProb ?? prefill?.drawProb ?? 25);
+  const [awayWinProb, setAwayWinProb] = useState(editing?.awayWinProb ?? prefill?.awayWinProb ?? 35);
+  const [homeOdds, setHomeOdds]       = useState(editing?.homeOdds ?? prefill?.homeOdds ?? 0);
+  const [drawOdds, setDrawOdds]       = useState(editing?.drawOdds ?? prefill?.drawOdds ?? 0);
+  const [awayOdds, setAwayOdds]       = useState(editing?.awayOdds ?? prefill?.awayOdds ?? 0);
   const [platform, setPlatform]       = useState<Platform>(editing?.platform ?? "Gamdom");
-  const [analysis, setAnalysis]       = useState(editing?.analysis ?? "");
+  const [analysis, setAnalysis]       = useState(editing?.analysis ?? prefill?.analysis ?? "");
   const [result, setResult]           = useState<TipResult>(editing?.result ?? "pending");
 
   const overlayRef = useRef<HTMLDivElement>(null);
