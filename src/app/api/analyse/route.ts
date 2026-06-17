@@ -10,6 +10,9 @@ export interface AnalysisResult {
   homeWinProb: number;
   drawProb: number;
   awayWinProb: number;
+  bttsProb: number;        // Both Teams To Score %
+  over25Prob: number;      // Over 2.5 Goals %
+  predictedScore: string;  // e.g. "2-1"
   keyStats: string[];
   recommendedBet: {
     market: string;
@@ -21,9 +24,12 @@ export interface AnalysisResult {
     homeWin: number;
     draw: number;
     awayWin: number;
+    btts: number | null;
+    over25: number | null;
     source: string;
   } | null;
   expectedValue: number | null;
+  valueEdge: number | null;  // model prob minus bookmaker implied prob
   kellyFraction: number | null;
   stakeRating: "High Stake" | "Medium Stake" | "Low Stake" | "Skip";
   stakeReasoning: string;
@@ -74,23 +80,27 @@ function buildMatchPrompt(
   awayOdds?: number,
   bankroll?: number
 ) {
-  const oddsCtx =
-    homeOdds || drawOdds || awayOdds
-      ? `Odds from Gamdom/Rollbit — Home: ${homeOdds ?? "N/A"}, Draw: ${drawOdds ?? "N/A"}, Away: ${awayOdds ?? "N/A"}`
-      : "No odds provided — estimate typical market odds based on team quality.";
+  const hasOdds = homeOdds || drawOdds || awayOdds;
+  const oddsCtx = hasOdds
+    ? `Gamdom/Rollbit odds supplied — Home: ${homeOdds ?? "N/A"}, Draw: ${drawOdds ?? "N/A"}, Away: ${awayOdds ?? "N/A"}`
+    : "No odds supplied — estimate realistic Gamdom/Rollbit decimal odds (these crypto books typically have 5-8% margin, slightly higher than Pinnacle).";
 
-  return `You are an elite football betting analyst. Analyse this World Cup 2026 match.
+  return `You are an elite football betting quant analysing WC2026 for a bettor on Gamdom and Rollbit.
 
 Match: ${homeTeam} vs ${awayTeam} on ${date}
 ${oddsCtx}
 ${bankroll ? `Bankroll: £${bankroll}` : ""}
 
-Kelly formula: k = (p*(b-1)-(1-p))/(b-1) where b=decimal odds, p=win prob as decimal
+Think like a value betting analyst. Identify market inefficiencies vs Gamdom/Rollbit pricing.
+
+Kelly: k=(p*(b-1)-(1-p))/(b-1) — b=decimal odds, p=decimal probability
 EV: (p*(odds-1))-(1-p) as decimal
-stakeRating: "High Stake" if kelly>0.08 AND High confidence, "Medium Stake" if 0.04-0.08, "Low Stake" if 0.01-0.04, "Skip" if <=0
+valueEdge: (model prob of recommended bet) minus (1/offered odds) — positive means value
+stakeRating: "High Stake" kelly>0.08 AND High confidence | "Medium Stake" 0.04-0.08 | "Low Stake" 0.01-0.04 | "Skip" <=0
+Gamdom/Rollbit typical ranges: BTTS Yes 1.65-2.10, Over 2.5 Goals 1.70-2.20
 
 Return ONLY this JSON object, no markdown:
-{"match":"${homeTeam} vs ${awayTeam}","homeTeam":"${homeTeam}","awayTeam":"${awayTeam}","date":"${date}","summary":"2-3 sentence expert preview","homeWinProb":45,"drawProb":25,"awayWinProb":30,"keyStats":["Form stat","Squad quality","Head-to-head","Tournament context"],"recommendedBet":{"market":"Match Result","prediction":"Home Win","reasoning":"Value reasoning","confidence":"High"},"oddsFound":{"homeWin":2.10,"draw":3.40,"awayWin":3.20,"source":"Gamdom/Rollbit estimate"},"expectedValue":0.05,"kellyFraction":0.08,"stakeRating":"High Stake","stakeReasoning":"Good edge","risksToConsider":["Risk 1","Risk 2"]}`;
+{"match":"${homeTeam} vs ${awayTeam}","homeTeam":"${homeTeam}","awayTeam":"${awayTeam}","date":"${date}","summary":"2-3 sentence value-focused preview","homeWinProb":45,"drawProb":25,"awayWinProb":30,"bttsProb":52,"over25Prob":58,"predictedScore":"2-1","keyStats":["Form/recent results","Scoring record or xG tendency","Head-to-head record","Key tactical factor"],"recommendedBet":{"market":"Match Result","prediction":"Home Win","reasoning":"Why this beats Gamdom/Rollbit price","confidence":"High"},"oddsFound":{"homeWin":2.10,"draw":3.40,"awayWin":3.20,"btts":1.85,"over25":1.92,"source":"Gamdom/Rollbit estimate"},"expectedValue":0.05,"valueEdge":0.042,"kellyFraction":0.08,"stakeRating":"High Stake","stakeReasoning":"Edge vs Gamdom/Rollbit line","risksToConsider":["Risk 1","Risk 2"]}`;
 }
 
 function buildRecommendationsPrompt(date: string) {
@@ -101,13 +111,14 @@ function buildRecommendationsPrompt(date: string) {
 CONFIRMED WC 2026 MATCHES ON ${date}:
 ${fixtureCtx}
 
-Analyse ONLY the UPCOMING matches listed above (ignore any marked [RESULT]). Pick the best 3 value bets from these specific fixtures. Use real team quality, form, head-to-head history and typical Gamdom/Rollbit odds.
+Analyse ONLY the UPCOMING matches listed above (ignore any marked [RESULT]). Pick the best 3 value bets from these specific fixtures vs Gamdom/Rollbit pricing. Think like a quant — find market inefficiencies, not just winners.
 
-Kelly: k = (p*(b-1)-(1-p))/(b-1), EV: (p*(odds-1))-(1-p)
-stakeRating: "High Stake" if kelly>0.08 AND High, "Medium Stake" 0.04-0.08, "Low Stake" 0.01-0.04, "Skip" <=0
+Kelly: k=(p*(b-1)-(1-p))/(b-1), EV: (p*(odds-1))-(1-p), valueEdge: model_prob minus (1/offered_odds)
+stakeRating: "High Stake" kelly>0.08 AND High | "Medium Stake" 0.04-0.08 | "Low Stake" 0.01-0.04 | "Skip" <=0
+Gamdom/Rollbit typical: BTTS Yes 1.65-2.10, Over 2.5 Goals 1.70-2.20
 
 Return ONLY a valid JSON array, no markdown:
-[{"match":"Team A vs Team B","homeTeam":"Team A","awayTeam":"Team B","date":"${date}","summary":"Expert preview","homeWinProb":55,"drawProb":22,"awayWinProb":23,"keyStats":["stat 1","stat 2","stat 3","stat 4"],"recommendedBet":{"market":"Match Result","prediction":"Home Win","reasoning":"Why this is value","confidence":"High"},"oddsFound":{"homeWin":1.95,"draw":3.50,"awayWin":3.80,"source":"Gamdom/Rollbit"},"expectedValue":0.07,"kellyFraction":0.10,"stakeRating":"High Stake","stakeReasoning":"Strong value","risksToConsider":["Risk 1","Risk 2"]}]`;
+[{"match":"Team A vs Team B","homeTeam":"Team A","awayTeam":"Team B","date":"${date}","summary":"Value-focused expert preview","homeWinProb":55,"drawProb":22,"awayWinProb":23,"bttsProb":60,"over25Prob":65,"predictedScore":"2-1","keyStats":["stat 1","stat 2","stat 3","stat 4"],"recommendedBet":{"market":"Match Result","prediction":"Home Win","reasoning":"Why this beats Gamdom/Rollbit","confidence":"High"},"oddsFound":{"homeWin":1.95,"draw":3.50,"awayWin":3.80,"btts":1.80,"over25":1.88,"source":"Gamdom/Rollbit"},"expectedValue":0.07,"valueEdge":0.05,"kellyFraction":0.10,"stakeRating":"High Stake","stakeReasoning":"Strong value vs Gamdom/Rollbit line","risksToConsider":["Risk 1","Risk 2"]}]`;
 }
 
 export interface CustomBetResult {
@@ -122,6 +133,77 @@ export interface CustomBetResult {
   reasoning: string;
   keyFactors: string[];
   risks: string[];
+}
+
+export interface SimulatorTeam {
+  team: string;
+  group: string;
+  groupAdvance: number;   // % chance to advance from group
+  roundOf16: number;      // % chance to reach R16
+  quarterFinal: number;
+  semiFinal: number;
+  final: number;
+  winner: number;
+}
+
+export interface SimulatorResult {
+  topContenders: SimulatorTeam[];
+  groupInsights: string[];
+  upsetAlerts: string[];
+  simulatedAt: string;
+}
+
+export interface UpsetPick {
+  match: string;
+  homeTeam: string;
+  awayTeam: string;
+  date: string;
+  group: string;
+  underdog: string;
+  favorite: string;
+  underdogWinProb: number;
+  estimatedUnderdogOdds: number;
+  fairOdds: number;
+  valueEdgePct: number;
+  reasoning: string;
+  confidence: "High" | "Medium" | "Low";
+}
+
+export interface UpsetResult {
+  date: string;
+  picks: UpsetPick[];
+  summary: string;
+}
+
+function buildSimulatorPrompt(fixtureContext: string) {
+  return `You are a World Cup 2026 football quant. Simulate the remaining WC2026 tournament 10,000 times using your knowledge of team strength, form, Elo ratings and squad quality.
+
+CURRENT WC2026 RESULTS AND UPCOMING FIXTURES:
+${fixtureContext}
+
+Based on current group standings (inferred from results above) and remaining matches, calculate each team's probability of reaching each knockout stage.
+
+Focus on teams still in contention. For teams already eliminated or in very weak positions, you can omit or set their winner % to 0.
+
+Return ONLY this JSON object, no markdown:
+{"topContenders":[{"team":"Argentina","group":"Group J","groupAdvance":98,"roundOf16":90,"quarterFinal":72,"semiFinal":52,"final":34,"winner":22},{"team":"France","group":"Group I","groupAdvance":97,"roundOf16":88,"quarterFinal":68,"semiFinal":48,"final":30,"winner":18},{"team":"England","group":"Group L","groupAdvance":92,"roundOf16":82,"quarterFinal":60,"semiFinal":40,"final":24,"winner":14},{"team":"Brazil","group":"Group C","groupAdvance":80,"roundOf16":68,"quarterFinal":48,"semiFinal":30,"final":18,"winner":10},{"team":"Germany","group":"Group E","groupAdvance":96,"roundOf16":85,"quarterFinal":62,"semiFinal":42,"final":25,"winner":13},{"team":"Spain","group":"Group H","groupAdvance":75,"roundOf16":62,"quarterFinal":44,"semiFinal":28,"final":16,"winner":8},{"team":"Portugal","group":"Group K","groupAdvance":88,"roundOf16":74,"quarterFinal":52,"semiFinal":34,"final":20,"winner":10},{"team":"Netherlands","group":"Group F","groupAdvance":82,"roundOf16":70,"quarterFinal":50,"semiFinal":32,"final":18,"winner":9},{"team":"USA","group":"Group D","groupAdvance":94,"roundOf16":82,"quarterFinal":55,"semiFinal":35,"final":18,"winner":8},{"team":"Colombia","group":"Group K","groupAdvance":72,"roundOf16":58,"quarterFinal":38,"semiFinal":22,"final":12,"winner":6}],"groupInsights":["Key group stage observation 1","Key group stage observation 2","Surprise result or tight group"],"upsetAlerts":["Team that could cause an upset","Another potential shock"]}`;
+}
+
+function buildUpsetPrompt(date: string, fixtureContext: string) {
+  const d = new Date(date).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+  return `You are a football betting quant specialising in finding underdog value on Gamdom and Rollbit.
+
+TODAY'S WC2026 UPCOMING FIXTURES (${d}):
+${fixtureContext}
+
+For each upcoming match, assess whether the underdog has positive expected value vs typical Gamdom/Rollbit pricing.
+
+Gamdom/Rollbit context: These crypto sportsbooks typically price heavy favourites at 1.25-1.50, medium favourites at 1.55-1.90, slight favourites at 1.90-2.20. Underdogs are often overpriced at 3.00+ when true probability is 28-35%.
+
+Flag ONLY matches where the underdog (or draw) has genuine value — at least +5% edge vs estimated Gamdom/Rollbit odds. If no upsets have value, return an empty picks array.
+
+Return ONLY this JSON object, no markdown:
+{"date":"${date}","picks":[{"match":"Team A vs Team B","homeTeam":"Team A","awayTeam":"Team B","date":"${date}","group":"Group X","underdog":"Team B","favorite":"Team A","underdogWinProb":32,"estimatedUnderdogOdds":3.80,"fairOdds":3.12,"valueEdgePct":7.2,"reasoning":"Why Team B has genuine value here — tactical, form, or market mispricing reason","confidence":"Medium"}],"summary":"Overall assessment of today's upset opportunities vs Gamdom/Rollbit lines"}`;
 }
 
 function buildCustomBetPrompt(betDescription: string, offeredOdds: number | null, bankroll: number | null) {
@@ -211,7 +293,11 @@ function extractJson(text: string): unknown {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await req.json() as {
+      mode?: string; homeTeam?: string; awayTeam?: string; date?: string;
+      homeOdds?: number; drawOdds?: number; awayOdds?: number; bankroll?: number;
+      apiKey?: string; betDescription?: string; offeredOdds?: number;
+    };
     const { mode, homeTeam, awayTeam, date, homeOdds, drawOdds, awayOdds, bankroll, apiKey,
             betDescription, offeredOdds } = body;
 
@@ -224,6 +310,37 @@ export async function POST(req: NextRequest) {
     }
 
     const targetDate = date || new Date().toISOString().slice(0, 10);
+
+    if (mode === "simulator") {
+      // Build full fixture context (all matches with results + upcoming)
+      const allCtx = GROUP_FIXTURES.map((f) => {
+        const result = f.homeScore !== undefined
+          ? ` [${f.homeScore}-${f.awayScore}]`
+          : " [UPCOMING]";
+        return `- ${f.homeTeam} vs ${f.awayTeam} (${f.group}, ${f.date})${result}`;
+      }).join("\n");
+      const text = await callGroq(buildSimulatorPrompt(allCtx), key);
+      const result = extractJson(text) as SimulatorResult;
+      result.simulatedAt = new Date().toISOString();
+      return NextResponse.json(result);
+    }
+
+    if (mode === "upsets") {
+      const fixtureCtx = getFixtureContext(targetDate);
+      if (fixtureCtx.includes("No group stage")) {
+        return NextResponse.json({ date: targetDate, picks: [], summary: "No upcoming fixtures on this date." });
+      }
+      const upcomingCtx = GROUP_FIXTURES
+        .filter((f) => f.date === targetDate && f.homeScore === undefined)
+        .map((f) => `- ${f.homeTeam} vs ${f.awayTeam} (${f.group}) [UPCOMING]`)
+        .join("\n");
+      if (!upcomingCtx) {
+        return NextResponse.json({ date: targetDate, picks: [], summary: "All matches on this date have already been played." });
+      }
+      const text = await callGroq(buildUpsetPrompt(targetDate, upcomingCtx), key);
+      const result = extractJson(text) as UpsetResult;
+      return NextResponse.json(result);
+    }
 
     if (mode === "recommendations") {
       const text = await callGroq(buildRecommendationsPrompt(targetDate), key);

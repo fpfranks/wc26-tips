@@ -5,8 +5,9 @@ import {
   Sparkles, Search, TrendingUp, TrendingDown, AlertTriangle, CheckCircle,
   XCircle, Loader2, ChevronDown, ChevronUp, Plus, Layers, ChevronLeft,
   ChevronRight, Calendar, BarChart2, RefreshCw, Zap, MessageSquare,
+  Trophy, Flame,
 } from "lucide-react";
-import type { AnalysisResult, AccaResult, CustomBetResult } from "@/app/api/analyse/route";
+import type { AnalysisResult, AccaResult, CustomBetResult, SimulatorResult, UpsetResult } from "@/app/api/analyse/route";
 import type { OddsComparison } from "@/app/api/odds/route";
 import { getFixturesForDate, isPlayed, type Fixture } from "@/data/fixtures";
 import { useApp } from "@/context/AppContext";
@@ -188,6 +189,42 @@ function AnalysisCard({ analysis, bankroll }: { analysis: AnalysisResult; bankro
             </div>
           </div>
 
+          {/* Extra markets row */}
+          {(analysis.bttsProb !== undefined || analysis.over25Prob !== undefined || analysis.predictedScore) && (
+            <div className="mt-3 flex gap-3 flex-wrap">
+              {analysis.bttsProb !== undefined && (
+                <div className="flex items-center gap-1.5 bg-white/4 border border-white/8 rounded-lg px-3 py-1.5">
+                  <span className="text-[10px] text-white/30 uppercase tracking-wider">BTTS</span>
+                  <span className={`text-xs font-bold ${analysis.bttsProb >= 55 ? "text-green-400" : analysis.bttsProb >= 45 ? "text-amber-400" : "text-white/60"}`}>
+                    {analysis.bttsProb}%
+                  </span>
+                </div>
+              )}
+              {analysis.over25Prob !== undefined && (
+                <div className="flex items-center gap-1.5 bg-white/4 border border-white/8 rounded-lg px-3 py-1.5">
+                  <span className="text-[10px] text-white/30 uppercase tracking-wider">O 2.5</span>
+                  <span className={`text-xs font-bold ${analysis.over25Prob >= 60 ? "text-green-400" : analysis.over25Prob >= 50 ? "text-amber-400" : "text-white/60"}`}>
+                    {analysis.over25Prob}%
+                  </span>
+                </div>
+              )}
+              {analysis.predictedScore && (
+                <div className="flex items-center gap-1.5 bg-white/4 border border-white/8 rounded-lg px-3 py-1.5">
+                  <span className="text-[10px] text-white/30 uppercase tracking-wider">Predicted</span>
+                  <span className="text-xs font-bold text-white">{analysis.predictedScore}</span>
+                </div>
+              )}
+              {analysis.valueEdge !== null && analysis.valueEdge !== undefined && (
+                <div className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 border ${analysis.valueEdge > 0.05 ? "bg-green-500/10 border-green-500/25" : analysis.valueEdge > 0 ? "bg-blue-500/10 border-blue-500/20" : "bg-red-500/10 border-red-500/20"}`}>
+                  <span className="text-[10px] text-white/30 uppercase tracking-wider">Edge</span>
+                  <span className={`text-xs font-bold ${analysis.valueEdge > 0.05 ? "text-green-400" : analysis.valueEdge > 0 ? "text-blue-400" : "text-red-400"}`}>
+                    {analysis.valueEdge > 0 ? "+" : ""}{(analysis.valueEdge * 100).toFixed(1)}%
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="mt-4 bg-white/3 border border-white/8 rounded-xl p-4">
             <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">AI Pick</p>
             <div className="flex items-center gap-3 flex-wrap">
@@ -196,10 +233,12 @@ function AnalysisCard({ analysis, bankroll }: { analysis: AnalysisResult; bankro
                 <span className="text-xs text-white/40 ml-2">{analysis.recommendedBet.market}</span>
               </div>
               {analysis.oddsFound && (
-                <div className="flex gap-3 text-xs">
+                <div className="flex gap-3 text-xs flex-wrap">
                   <span className="text-white/50">H: <span className="text-white font-medium">{analysis.oddsFound.homeWin}</span></span>
                   <span className="text-white/50">D: <span className="text-white font-medium">{analysis.oddsFound.draw}</span></span>
                   <span className="text-white/50">A: <span className="text-white font-medium">{analysis.oddsFound.awayWin}</span></span>
+                  {analysis.oddsFound.btts && <span className="text-white/50">BTTS: <span className="text-white font-medium">{analysis.oddsFound.btts}</span></span>}
+                  {analysis.oddsFound.over25 && <span className="text-white/50">O2.5: <span className="text-white font-medium">{analysis.oddsFound.over25}</span></span>}
                 </div>
               )}
             </div>
@@ -630,8 +669,174 @@ function OddsPanel({
   );
 }
 
+/* ── Tournament Simulator Card ── */
+function SimulatorCard({ result }: { result: SimulatorResult }) {
+  const top = [...result.topContenders].sort((a, b) => b.winner - a.winner);
+  const maxWinner = top[0]?.winner ?? 1;
+
+  return (
+    <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-4 border-b border-yellow-500/10">
+        <Trophy className="h-4 w-4 text-yellow-400" />
+        <h3 className="text-sm font-bold text-yellow-400">WC2026 Tournament Simulator</h3>
+        <span className="ml-auto text-[10px] text-yellow-400/50">10,000 simulations</span>
+      </div>
+
+      <div className="px-5 py-4 space-y-4">
+        {/* Winner probability bars */}
+        <div>
+          <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider mb-3">Tournament Winner Probability</p>
+          <div className="space-y-2.5">
+            {top.slice(0, 12).map((team, i) => (
+              <div key={team.team} className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white/20 w-4 text-right">{i + 1}</span>
+                    <span className="font-semibold text-white">{team.team}</span>
+                    <span className="text-[10px] text-white/30">{team.group}</span>
+                  </div>
+                  <span className={`font-bold ${i === 0 ? "text-yellow-400" : i < 3 ? "text-white" : "text-white/60"}`}>
+                    {team.winner}%
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${i === 0 ? "bg-yellow-400" : i < 3 ? "bg-white/50" : "bg-white/25"}`}
+                    style={{ width: `${(team.winner / maxWinner) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Knockout probabilities table */}
+        <div className="overflow-x-auto">
+          <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">Knockout Stage Probabilities</p>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-white/25 text-[10px]">
+                <th className="text-left py-1.5 pr-4 font-medium">Team</th>
+                <th className="text-center py-1.5 px-2 font-medium">R32</th>
+                <th className="text-center py-1.5 px-2 font-medium">R16</th>
+                <th className="text-center py-1.5 px-2 font-medium">QF</th>
+                <th className="text-center py-1.5 px-2 font-medium">SF</th>
+                <th className="text-center py-1.5 px-2 font-medium">Final</th>
+                <th className="text-center py-1.5 px-2 font-medium">Win</th>
+              </tr>
+            </thead>
+            <tbody>
+              {top.slice(0, 8).map((team, i) => (
+                <tr key={team.team} className="border-t border-white/5">
+                  <td className={`py-2 pr-4 font-semibold ${i === 0 ? "text-yellow-400" : "text-white/80"}`}>{team.team}</td>
+                  <td className="py-2 px-2 text-center text-white/40">{team.groupAdvance}%</td>
+                  <td className="py-2 px-2 text-center text-white/50">{team.roundOf16}%</td>
+                  <td className="py-2 px-2 text-center text-white/60">{team.quarterFinal}%</td>
+                  <td className="py-2 px-2 text-center text-white/70">{team.semiFinal}%</td>
+                  <td className="py-2 px-2 text-center text-white/80">{team.final}%</td>
+                  <td className={`py-2 px-2 text-center font-bold ${i === 0 ? "text-yellow-400" : i < 3 ? "text-white" : "text-white/60"}`}>{team.winner}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Insights + upset alerts */}
+        {result.groupInsights.length > 0 && (
+          <div>
+            <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">Group Stage Insights</p>
+            <ul className="space-y-1.5">
+              {result.groupInsights.map((ins, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-white/60">
+                  <CheckCircle className="h-3.5 w-3.5 text-yellow-400/60 mt-0.5 flex-shrink-0" />{ins}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {result.upsetAlerts.length > 0 && (
+          <div>
+            <p className="text-[10px] font-medium text-white/30 uppercase tracking-wider mb-2">Upset Alerts</p>
+            <ul className="space-y-1.5">
+              {result.upsetAlerts.map((a, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-white/60">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-400/60 mt-0.5 flex-shrink-0" />{a}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Upset Detector Card ── */
+function UpsetDetectorCard({ result }: { result: UpsetResult }) {
+  const CONF_STYLES = { High: "text-green-400", Medium: "text-amber-400", Low: "text-white/40" };
+
+  if (result.picks.length === 0) {
+    return (
+      <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 px-5 py-8 text-center">
+        <Flame className="h-8 w-8 text-orange-400/30 mx-auto mb-3" />
+        <p className="text-sm text-white/40">No strong upset value found on Gamdom/Rollbit today.</p>
+        <p className="text-xs text-white/25 mt-1">{result.summary}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-white/40 leading-relaxed">{result.summary}</p>
+      {result.picks.map((pick, i) => (
+        <div key={i} className="rounded-2xl border border-orange-500/20 bg-orange-500/5 overflow-hidden">
+          <div className="px-5 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Flame className="h-3.5 w-3.5 text-orange-400 flex-shrink-0" />
+                  <h3 className="text-sm font-bold text-white">{pick.match}</h3>
+                  <span className="text-[10px] text-white/30">{pick.group}</span>
+                  <span className={`text-[10px] font-semibold ${CONF_STYLES[pick.confidence]}`}>{pick.confidence}</span>
+                </div>
+                <p className="text-xs text-white/40 mt-0.5">{fmtShort(pick.date)}</p>
+              </div>
+              {/* Value edge badge */}
+              <div className={`flex-shrink-0 px-3 py-2 rounded-xl text-center border ${pick.valueEdgePct >= 7 ? "bg-green-500/15 border-green-500/25" : "bg-orange-500/15 border-orange-500/20"}`}>
+                <p className="text-[10px] text-white/30 uppercase tracking-wider">Edge</p>
+                <p className={`text-lg font-black ${pick.valueEdgePct >= 7 ? "text-green-400" : "text-orange-400"}`}>+{pick.valueEdgePct.toFixed(1)}%</p>
+              </div>
+            </div>
+
+            <div className="mt-3 flex gap-3 flex-wrap text-xs">
+              <span className="bg-white/5 border border-white/8 rounded-lg px-3 py-1.5">
+                <span className="text-white/30">Underdog: </span>
+                <span className="text-white font-semibold">{pick.underdog}</span>
+              </span>
+              <span className="bg-white/5 border border-white/8 rounded-lg px-3 py-1.5">
+                <span className="text-white/30">Win prob: </span>
+                <span className="text-orange-400 font-bold">{pick.underdogWinProb}%</span>
+              </span>
+              <span className="bg-white/5 border border-white/8 rounded-lg px-3 py-1.5">
+                <span className="text-white/30">Gamdom/Rollbit: </span>
+                <span className="text-white font-bold">{pick.estimatedUnderdogOdds}</span>
+              </span>
+              <span className="bg-white/5 border border-white/8 rounded-lg px-3 py-1.5">
+                <span className="text-white/30">Fair odds: </span>
+                <span className="text-white/70 font-medium">{pick.fairOdds}</span>
+              </span>
+            </div>
+
+            <p className="mt-3 text-sm text-white/60 leading-relaxed">{pick.reasoning}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ── Main Panel ── */
-type Mode = "recommendations" | "acca" | "specific" | "custom";
+type Mode = "recommendations" | "acca" | "specific" | "custom" | "simulator" | "upsets";
 
 export default function AIPicksPanel() {
   const { tips } = useApp();
@@ -641,8 +846,10 @@ export default function AIPicksPanel() {
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState("");
   const [results, setResults]     = useState<AnalysisResult[]>([]);
-  const [acca, setAcca]             = useState<AccaResult | null>(null);
-  const [customResult, setCustomResult] = useState<CustomBetResult | null>(null);
+  const [acca, setAcca]                   = useState<AccaResult | null>(null);
+  const [customResult, setCustomResult]   = useState<CustomBetResult | null>(null);
+  const [simResult, setSimResult]         = useState<SimulatorResult | null>(null);
+  const [upsetResult, setUpsetResult]     = useState<UpsetResult | null>(null);
   const [apiKey, setApiKey]         = useState("");
   const [bankroll, setBankroll]     = useState<number | "">(200);
   const [pickedDate, setPickedDate] = useState(today);
@@ -673,6 +880,8 @@ export default function AIPicksPanel() {
     setResults([]);
     setAcca(null);
     setCustomResult(null);
+    setSimResult(null);
+    setUpsetResult(null);
     setError("");
   }
 
@@ -693,6 +902,8 @@ export default function AIPicksPanel() {
     setResults([]);
     setAcca(null);
     setCustomResult(null);
+    setSimResult(null);
+    setUpsetResult(null);
 
     try {
       let bodyData: Record<string, unknown>;
@@ -705,6 +916,10 @@ export default function AIPicksPanel() {
           mode: "custom", betDescription, offeredOdds: offeredOdds || undefined,
           bankroll: bankroll || undefined, apiKey,
         };
+      } else if (mode === "simulator") {
+        bodyData = { mode: "simulator", apiKey };
+      } else if (mode === "upsets") {
+        bodyData = { mode: "upsets", date: pickedDate, apiKey };
       } else {
         bodyData = {
           mode: "specific", homeTeam, awayTeam, date: matchDate,
@@ -725,6 +940,8 @@ export default function AIPicksPanel() {
       if (mode === "recommendations") setResults(data.tips ?? []);
       else if (mode === "acca") setAcca(data as AccaResult);
       else if (mode === "custom") setCustomResult(data as CustomBetResult);
+      else if (mode === "simulator") setSimResult(data as SimulatorResult);
+      else if (mode === "upsets") setUpsetResult(data as UpsetResult);
       else setResults([data]);
     } catch {
       setError("Network error — check your connection");
@@ -739,11 +956,15 @@ export default function AIPicksPanel() {
   const btnLabel = mode === "recommendations" ? "Get Best Bets"
     : mode === "acca" ? "Build AI Acca"
     : mode === "custom" ? "Evaluate My Bet"
+    : mode === "simulator" ? "Run Simulator"
+    : mode === "upsets" ? "Find Upsets"
     : "Analyse Match";
 
   const loadingLabel = mode === "recommendations" ? "Finding best bets…"
     : mode === "acca" ? "Building acca…"
     : mode === "custom" ? "Evaluating bet…"
+    : mode === "simulator" ? "Running 10,000 simulations…"
+    : mode === "upsets" ? "Scanning for upset value…"
     : "Analysing match…";
 
   return (
@@ -786,6 +1007,14 @@ export default function AIPicksPanel() {
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${mode === "custom" ? "bg-teal-500/20 text-teal-400" : "text-white/40 hover:text-white/60"}`}>
                 <MessageSquare className="h-3 w-3" /> Custom Bet
               </button>
+              <button onClick={() => switchMode("upsets")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${mode === "upsets" ? "bg-orange-500/20 text-orange-400" : "text-white/40 hover:text-white/60"}`}>
+                <Flame className="h-3 w-3" /> Upset Finder
+              </button>
+              <button onClick={() => switchMode("simulator")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${mode === "simulator" ? "bg-yellow-500/20 text-yellow-400" : "text-white/40 hover:text-white/60"}`}>
+                <Trophy className="h-3 w-3" /> Simulator
+              </button>
             </div>
             <div className="flex items-center gap-1.5 ml-auto">
               <span className="text-xs text-white/30">£</span>
@@ -795,11 +1024,20 @@ export default function AIPicksPanel() {
           </div>
 
           {/* Date navigator with fixture list */}
-          {(mode === "recommendations" || mode === "acca") && (
+          {(mode === "recommendations" || mode === "acca" || mode === "upsets") && (
             <DateNav
               date={pickedDate}
-              onChange={(d) => { setPickedDate(d); setResults([]); setAcca(null); setError(""); }}
+              onChange={(d) => { setPickedDate(d); setResults([]); setAcca(null); setUpsetResult(null); setError(""); }}
             />
+          )}
+
+          {/* Simulator explanation */}
+          {mode === "simulator" && (
+            <div className="rounded-xl bg-yellow-500/8 border border-yellow-500/15 px-4 py-3">
+              <p className="text-xs text-yellow-400/80 leading-relaxed">
+                Simulates the remaining WC2026 tournament 10,000 times using team strength, current results, and group standings. Shows each team&#39;s probability of reaching the Final and winning the tournament.
+              </p>
+            </div>
           )}
 
           {/* Specific match form */}
@@ -906,19 +1144,33 @@ export default function AIPicksPanel() {
           )}
 
           <button onClick={runAnalysis}
-            disabled={loading || (mode === "specific" && (!homeTeam || !awayTeam)) || ((mode === "recommendations" || mode === "acca") && !hasUpcoming) || (mode === "custom" && !betDescription.trim())}
+            disabled={
+              loading
+              || (mode === "specific" && (!homeTeam || !awayTeam))
+              || ((mode === "recommendations" || mode === "acca" || mode === "upsets") && !hasUpcoming)
+              || (mode === "custom" && !betDescription.trim())
+            }
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl disabled:opacity-40 text-sm font-bold transition-all ${
-              mode === "acca" ? "bg-purple-500 hover:bg-purple-400 text-white"
-              : mode === "custom" ? "bg-teal-500 hover:bg-teal-400 text-black"
+              mode === "acca"      ? "bg-purple-500 hover:bg-purple-400 text-white"
+              : mode === "custom"    ? "bg-teal-500 hover:bg-teal-400 text-black"
+              : mode === "upsets"   ? "bg-orange-500 hover:bg-orange-400 text-black"
+              : mode === "simulator" ? "bg-yellow-500 hover:bg-yellow-400 text-black"
               : "bg-amber-500 hover:bg-amber-400 text-black"
             }`}>
             {loading
               ? <><Loader2 className="h-4 w-4 animate-spin" />{loadingLabel}</>
-              : <>{mode === "acca" ? <Layers className="h-4 w-4" /> : mode === "custom" ? <MessageSquare className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}{btnLabel}</>
+              : <>
+                  {mode === "acca"      ? <Layers className="h-4 w-4" />
+                  : mode === "custom"    ? <MessageSquare className="h-4 w-4" />
+                  : mode === "upsets"   ? <Flame className="h-4 w-4" />
+                  : mode === "simulator" ? <Trophy className="h-4 w-4" />
+                  : <Sparkles className="h-4 w-4" />}
+                  {btnLabel}
+                </>
             }
           </button>
 
-          {(mode === "recommendations" || mode === "acca") && !hasUpcoming && getFixturesForDate(pickedDate).length > 0 && (
+          {(mode === "recommendations" || mode === "acca" || mode === "upsets") && !hasUpcoming && getFixturesForDate(pickedDate).length > 0 && (
             <p className="text-xs text-white/30">All matches on this date have already been played.</p>
           )}
 
@@ -938,6 +1190,10 @@ export default function AIPicksPanel() {
       {acca && <AccaCard acca={acca} bankroll={Number(bankroll) || 0} />}
 
       {customResult && <CustomBetCard result={customResult} bankroll={Number(bankroll) || 0} />}
+
+      {simResult && <SimulatorCard result={simResult} />}
+
+      {upsetResult && <UpsetDetectorCard result={upsetResult} />}
 
       {results.length > 0 && (
         <div className="space-y-4">
