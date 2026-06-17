@@ -60,49 +60,25 @@ function extractUsefulText(html: string): string {
   return parts.join("\n").slice(0, 3000);
 }
 
-function buildBetSlipPrompt(url: string, pageContent: string, pastedText: string, bankroll: number | null) {
-  const contentSection = pastedText
-    ? `USER-PASTED BET SLIP CONTENT:\n${pastedText}`
-    : pageContent
-    ? `PAGE CONTENT EXTRACTED FROM URL:\n${pageContent}`
-    : `No page content available. URL only: ${url}`;
+function buildBetSlipPrompt(url: string, pastedText: string, bankroll: number | null) {
+  return `You are an elite football betting analyst. Analyse this bet slip from Gamdom/Rollbit.
 
-  return `You are an elite football betting analyst. A bettor on Gamdom/Rollbit has shared a bet slip link for you to analyse.
+BET SLIP:
+${pastedText}
+${url && url !== "not provided" ? `Reference URL: ${url}` : ""}
+${bankroll ? `Bankroll: £${bankroll}` : ""}
 
-URL: ${url}
-${contentSection}
-${bankroll ? `Bettor's bankroll: £${bankroll}` : ""}
+Tasks:
+1. Read every selection (match, market, prediction, odds)
+2. Multiply all odds together for totalOdds
+3. Estimate probability the entire bet wins using WC2026 knowledge
+4. EV = (p * (totalOdds - 1)) - (1 - p)  where p = probability / 100
+5. Kelly k = (p * (totalOdds - 1) - (1 - p)) / (totalOdds - 1)
+6. stakeRating: "High Stake" kelly>0.08 | "Medium Stake" 0.04-0.08 | "Low Stake" 0.01-0.04 | "Skip" kelly<=0
+7. verdict: "Value Bet" EV>0 | "Fair" EV near 0 | "Poor Value" EV<-0.02
 
-Your task:
-1. Extract all bet selections from the content above (match, market, prediction, odds)
-2. Calculate the combined odds (multiply all selection odds)
-3. Estimate the true probability of the entire bet winning using your WC2026 knowledge
-4. Assess whether this is value vs Gamdom/Rollbit pricing
-5. Calculate EV = (probability/100 * (totalOdds - 1)) - (1 - probability/100)
-6. Calculate Kelly k = (p*(totalOdds-1)-(1-p))/(totalOdds-1) where p = probability/100
-
-stakeRating: "High Stake" if kelly>0.08 AND confident | "Medium Stake" 0.04-0.08 | "Low Stake" 0.01-0.04 | "Skip" if kelly≤0 | "Unknown" if you couldn't read the slip
-verdict: "Value Bet" EV>0 | "Fair" EV≈0 | "Poor Value" EV<-0.02 | "Cannot Analyse" if no bet data found
-
-If you cannot identify any selections from the content, set selections to [], totalOdds/probability/expectedValue/kellyFraction to null, verdict to "Cannot Analyse", stakeRating to "Unknown", and explain in reasoning.
-
-IMPORTANT: Calculate ALL numbers yourself. Do not use placeholder values.
-
-Return ONLY valid JSON, no markdown:
-{
-  "url": "${url}",
-  "selections": [{"match": "<team A vs team B>", "market": "<e.g. Match Result>", "prediction": "<e.g. Team A Win>", "odds": <decimal>}],
-  "totalOdds": <combined_odds_or_null>,
-  "stake": <stake_if_visible_or_null>,
-  "probability": <your_estimated_win_probability_0_to_100_or_null>,
-  "expectedValue": <ev_decimal_or_null>,
-  "kellyFraction": <kelly_decimal_or_null>,
-  "verdict": "<Value Bet|Fair|Poor Value|Cannot Analyse>",
-  "stakeRating": "<High Stake|Medium Stake|Low Stake|Skip|Unknown>",
-  "reasoning": "<2-3 sentences on whether this bet has value — be specific about each selection>",
-  "keyFactors": ["<factor 1>", "<factor 2>"],
-  "risks": ["<risk 1>", "<risk 2>"]
-}`;
+Compute all numbers yourself. Return ONLY this JSON on one line, no markdown, no extra text:
+{"url":"${url.replace(/"/g, "'")}","selections":[{"match":"Team A vs Team B","market":"Match Result","prediction":"Team A Win","odds":1.65}],"totalOdds":2.97,"stake":null,"probability":38,"expectedValue":0.04,"kellyFraction":0.05,"verdict":"Value Bet","stakeRating":"Medium Stake","reasoning":"Your specific analysis here.","keyFactors":["Factor 1","Factor 2"],"risks":["Risk 1","Risk 2"]}`;
 }
 
 async function callGroq(prompt: string, apiKey: string): Promise<string> {
@@ -124,8 +100,11 @@ async function callGroq(prompt: string, apiKey: string): Promise<string> {
 function extractJson(text: string): unknown {
   const stripped = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
   const match = stripped.match(/(\{[\s\S]*\})/);
-  if (!match) throw new Error(`No JSON in response: ${text.slice(0, 200)}`);
-  return JSON.parse(match[0]);
+  if (!match) throw new Error(`No JSON found in AI response: ${text.slice(0, 200)}`);
+  let raw = match[0];
+  // Common AI JSON issues: trailing commas before } or ]
+  raw = raw.replace(/,\s*([}\]])/g, "$1");
+  return JSON.parse(raw);
 }
 
 export async function POST(req: NextRequest) {
@@ -137,13 +116,10 @@ export async function POST(req: NextRequest) {
     if (!key) return NextResponse.json({ error: "No Groq API key. Add it in Settings." }, { status: 503 });
     if (!pastedText) return NextResponse.json({ error: "Paste your bet slip selections first." }, { status: 400 });
 
-    // Try to fetch the page
-    const { text: pageContent, ok: couldReadPage } = await tryFetch(url);
-
-    const prompt = buildBetSlipPrompt(url, pageContent, pastedText ?? "", bankroll ?? null);
+    const prompt = buildBetSlipPrompt(url || "not provided", pastedText ?? "", bankroll ?? null);
     const raw = await callGroq(prompt, key);
     const result = extractJson(raw) as BetSlipResult;
-    result.couldReadPage = couldReadPage && pageContent.length > 100;
+    result.couldReadPage = false;
 
     return NextResponse.json(result);
   } catch (err: unknown) {
